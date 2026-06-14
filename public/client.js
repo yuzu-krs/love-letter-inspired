@@ -1121,12 +1121,24 @@ function reactToEffectEvent(effect) {
     return;
   }
 
+  if (effect.type === "exchange") {
+    playSound("exchange");
+    vibrate([8, 18, 8, 18, 12]);
+    showToast(
+      `${effect.playerName} と ${effect.targetName} が交換`,
+      "手札が入れ替わりました。",
+      "card",
+    );
+    showExchangeCinematic(effect);
+    return;
+  }
+
   if (effect.type === "guard") {
     playSound("guard");
     vibrate(14);
     showToast(
       `${effect.playerName} が護られました`,
-      "次の自分の番まで対象になりません。",
+      `${effect.sourcePlayerName || "相手"} の効果を防ぎました。`,
       "guard",
     );
     showGuardCinematic(effect);
@@ -1237,11 +1249,33 @@ function showGuardCinematic(effect) {
         <div class="cinematic-copy">
           <span>PROTECTED</span>
           <strong>${escapeHtml(effect.playerName)} は護られました</strong>
-          <p>次の自分の番まで、相手の効果の対象になりません。</p>
+          <p>${escapeHtml(effect.sourcePlayerName || "相手")} の ${escapeHtml(effect.card?.name || "効果")} を封じました。</p>
         </div>
       </article>
     `,
     "guard",
+  );
+}
+
+function showExchangeCinematic(effect) {
+  enqueueCinematic(
+    `
+      <article class="cinematic-exchange">
+        <div class="exchange-player left">
+          <span>${escapeHtml(effect.playerName)}</span>
+          <img src="${CARD_BACK_IMAGE}" alt="${escapeHtml(effect.playerName)} の手札" />
+        </div>
+        <div class="exchange-center">
+          <span>SWAP</span>
+          <strong>手札を交換</strong>
+        </div>
+        <div class="exchange-player right">
+          <span>${escapeHtml(effect.targetName)}</span>
+          <img src="${CARD_BACK_IMAGE}" alt="${escapeHtml(effect.targetName)} の手札" />
+        </div>
+      </article>
+    `,
+    "exchange",
   );
 }
 
@@ -1344,7 +1378,7 @@ function playNextCinematic() {
 function getCinematicDuration(type) {
   if (type === "winner") return 4200;
   if (type === "duel") return 3900;
-  if (["discard", "peek", "guard"].includes(type)) return 3600;
+  if (["discard", "peek", "guard", "exchange"].includes(type)) return 3600;
   return 3200;
 }
 
@@ -1492,6 +1526,12 @@ function playSound(type) {
       [420, 0.08, "sine", 0],
       [630, 0.1, "triangle", 0.08],
       [840, 0.12, "sine", 0.18],
+    ],
+    exchange: [
+      [480, 0.06, "triangle", 0, 0.07],
+      [620, 0.08, "triangle", 0.08, 0.075],
+      [360, 0.06, "sine", 0.18, 0.06],
+      [720, 0.1, "triangle", 0.26, 0.07],
     ],
     start: [
       [330, 0.07, "triangle", 0],

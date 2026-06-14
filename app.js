@@ -552,7 +552,7 @@ function applyCardEffect(
   switch (card.key) {
     case "scout": {
       if (!target || target.hand.length === 0) {
-        logNoTargetEffect(room, protectedTargets);
+        logNoTargetEffect(room, protectedTargets, player, card);
         return;
       }
       const guessedType = CARD_TYPE_BY_VALUE.get(guessValue);
@@ -568,7 +568,7 @@ function applyCardEffect(
     }
     case "seer": {
       if (!target || !target.hand[0]) {
-        logNoTargetEffect(room, protectedTargets);
+        logNoTargetEffect(room, protectedTargets, player, card);
         return;
       }
       room.insights.set(player.id, {
@@ -586,7 +586,7 @@ function applyCardEffect(
     }
     case "duel": {
       if (!target || !target.hand[0] || !player.hand[0]) {
-        logNoTargetEffect(room, protectedTargets);
+        logNoTargetEffect(room, protectedTargets, player, card);
         return;
       }
       const playerCard = player.hand[0];
@@ -629,17 +629,12 @@ function applyCardEffect(
     }
     case "veil": {
       player.protected = true;
-      room.lastEffect = createEffectEvent("guard", {
-        playerId: player.id,
-        playerName: player.name,
-        card,
-      });
-      room.log.push(`${player.name} は次の自分の番まで守られます。`);
+      room.log.push(`${player.name} は封蝋の護りを構えました。`);
       break;
     }
     case "patron": {
       if (!target || target.hand.length === 0) {
-        logNoTargetEffect(room, protectedTargets);
+        logNoTargetEffect(room, protectedTargets, player, card);
         return;
       }
       const discarded = target.hand.pop();
@@ -668,9 +663,16 @@ function applyCardEffect(
     }
     case "envoy": {
       if (!target || !target.hand[0] || !player.hand[0]) {
-        logNoTargetEffect(room, protectedTargets);
+        logNoTargetEffect(room, protectedTargets, player, card);
         return;
       }
+      room.lastEffect = createEffectEvent("exchange", {
+        playerId: player.id,
+        playerName: player.name,
+        targetId: target.id,
+        targetName: target.name,
+        card,
+      });
       const targetHand = target.hand;
       target.hand = player.hand;
       player.hand = targetHand;
@@ -767,9 +769,25 @@ function resolveTarget(room, player, cardType, targetId) {
   return { ok: true, player: target };
 }
 
-function logNoTargetEffect(room, protectedTargets = []) {
+function logNoTargetEffect(
+  room,
+  protectedTargets = [],
+  player = null,
+  card = null,
+) {
   if (protectedTargets.length > 0) {
     const names = protectedTargets.map((target) => target.name).join("、");
+    room.lastEffect = createEffectEvent("guard", {
+      playerId: protectedTargets[0].id,
+      playerName: names,
+      protectedTargets: protectedTargets.map((target) => ({
+        id: target.id,
+        name: target.name,
+      })),
+      sourcePlayerId: player?.id || null,
+      sourcePlayerName: player?.name || "相手",
+      card,
+    });
     room.log.push(`${names} は封蝋の護りに守られました。`);
     return;
   }

@@ -1705,6 +1705,69 @@ select:focus {
   text-shadow: 0 8px 18px rgba(0, 0, 0, 0.38);
 }
 
+.cinematic-exchange {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(120px, 170px) minmax(130px, 180px);
+  gap: 22px;
+  align-items: center;
+  padding: 26px;
+  border-color: rgba(42, 130, 121, 0.76);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 244, 216, 0.16), transparent 52%),
+    linear-gradient(135deg, rgba(42, 130, 121, 0.32), rgba(23, 22, 26, 0.95));
+  animation: exchangeSceneIn 0.34s ease-out;
+}
+
+.exchange-player {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  color: #fff4d8;
+  font-weight: 900;
+}
+
+.exchange-player img {
+  width: min(100%, 154px);
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 24px 42px rgba(0, 0, 0, 0.36);
+}
+
+.exchange-player.left img {
+  animation: exchangeLeftSwap 1.55s cubic-bezier(0.2, 0.9, 0.2, 1) infinite alternate;
+}
+
+.exchange-player.right img {
+  animation: exchangeRightSwap 1.55s cubic-bezier(0.2, 0.9, 0.2, 1) infinite alternate;
+}
+
+.exchange-center {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  color: #fff4d8;
+  text-align: center;
+}
+
+.exchange-center span {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff4d8;
+  border-radius: 999px;
+  background: rgba(42, 130, 121, 0.78);
+  font-weight: 900;
+  box-shadow: 0 0 0 10px rgba(255, 244, 216, 0.1);
+}
+
+.exchange-center strong {
+  font-size: 1rem;
+  text-shadow: 0 8px 18px rgba(0, 0, 0, 0.38);
+}
+
 .cinematic-peek,
 .cinematic-discard {
   position: relative;
@@ -1901,6 +1964,7 @@ select:focus {
 @media (max-width: 620px) {
   .cinematic-card-use,
   .cinematic-duel,
+  .cinematic-exchange,
   .cinematic-peek,
   .cinematic-discard,
   .cinematic-guard,
@@ -1932,6 +1996,22 @@ select:focus {
 
   .duel-card.right {
     order: 3;
+  }
+
+  .exchange-center {
+    order: 2;
+  }
+
+  .exchange-player.right {
+    order: 3;
+  }
+
+  .exchange-player.left img {
+    animation-name: exchangeLeftSwapMobile;
+  }
+
+  .exchange-player.right img {
+    animation-name: exchangeRightSwapMobile;
   }
 }
 
@@ -2053,6 +2133,76 @@ select:focus {
 
   to {
     transform: scale(1.08);
+  }
+}
+
+@keyframes exchangeSceneIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes exchangeLeftSwap {
+  from {
+    transform: translateX(0) rotate(-6deg);
+    z-index: 1;
+  }
+
+  50% {
+    transform: translateX(155px) rotate(7deg) scale(1.04);
+    z-index: 3;
+  }
+
+  to {
+    transform: translateX(270px) rotate(4deg);
+    z-index: 1;
+  }
+}
+
+@keyframes exchangeRightSwap {
+  from {
+    transform: translateX(0) rotate(6deg);
+    z-index: 1;
+  }
+
+  50% {
+    transform: translateX(-155px) rotate(-7deg) scale(1.04);
+    z-index: 2;
+  }
+
+  to {
+    transform: translateX(-270px) rotate(-4deg);
+    z-index: 1;
+  }
+}
+
+@keyframes exchangeLeftSwapMobile {
+  from {
+    transform: translateX(-44px) rotate(-6deg);
+    z-index: 1;
+  }
+
+  to {
+    transform: translateX(44px) rotate(5deg);
+    z-index: 2;
+  }
+}
+
+@keyframes exchangeRightSwapMobile {
+  from {
+    transform: translateX(44px) rotate(6deg);
+    z-index: 1;
+  }
+
+  to {
+    transform: translateX(-44px) rotate(-5deg);
+    z-index: 2;
   }
 }
 
