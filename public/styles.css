@@ -76,6 +76,8 @@ button:disabled {
 }
 
 .join-panel {
+  container-type: inline-size;
+  view-transition-name: join-panel;
   max-width: 720px;
   margin: 0 auto;
   padding: 28px;
@@ -132,6 +134,18 @@ h2 {
 .join-form {
   display: grid;
   gap: 16px;
+}
+
+@container (min-width: 620px) {
+  .join-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .join-form label:first-child,
+  .button-row,
+  .form-error {
+    grid-column: 1 / -1;
+  }
 }
 
 .table-teaser {
@@ -456,6 +470,7 @@ select:focus {
 }
 
 .game-panel {
+  view-transition-name: game-panel;
   align-self: start;
   display: grid;
   gap: 18px;
@@ -1431,8 +1446,94 @@ select:focus {
   border-color: rgba(185, 145, 46, 0.72);
 }
 
+.toast.card {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.toast.eliminate {
+  border-color: rgba(201, 75, 99, 0.72);
+}
+
+.toast.success,
+.toast.start {
+  border-color: rgba(29, 97, 79, 0.72);
+}
+
 .toast.leaving {
   animation: toastOut 0.24s ease-in forwards;
+}
+
+.command-dialog {
+  width: min(560px, calc(100vw - 28px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0;
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.98);
+  box-shadow: 0 30px 80px rgba(34, 33, 38, 0.28);
+}
+
+.command-dialog::backdrop {
+  background: rgba(23, 22, 26, 0.52);
+  backdrop-filter: blur(5px);
+}
+
+.command-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.command-dialog h2 {
+  font-size: 1.2rem;
+}
+
+.command-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.command-item {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--ink);
+  background: white;
+  text-align: left;
+}
+
+.command-item:hover:not(:disabled),
+.command-item:focus-visible {
+  border-color: rgba(29, 97, 79, 0.34);
+  box-shadow: 0 0 0 3px rgba(29, 97, 79, 0.12);
+}
+
+.command-item span {
+  font-weight: 900;
+}
+
+.command-item small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
+}
+
+::view-transition-old(join-panel),
+::view-transition-new(join-panel),
+::view-transition-old(game-panel),
+::view-transition-new(game-panel) {
+  animation-duration: 0.28s;
 }
 
 .cinematic-layer {
@@ -1726,5 +1827,16 @@ select:focus {
 @keyframes raysSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }

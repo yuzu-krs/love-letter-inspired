@@ -10,6 +10,11 @@ const elements = {
   roomPassword: document.querySelector('#roomPassword'),
   roomList: document.querySelector('#roomList'),
   formError: document.querySelector('#formError'),
+  commandOpenButton: document.querySelector('#commandOpenButton'),
+  commandOpenGameButton: document.querySelector('#commandOpenGameButton'),
+  commandCloseButton: document.querySelector('#commandCloseButton'),
+  commandDialog: document.querySelector('#commandDialog'),
+  commandList: document.querySelector('#commandList'),
   roomCodeLabel: document.querySelector('#roomCodeLabel'),
   phaseTitle: document.querySelector('#phaseTitle'),
   scoreTrack: document.querySelector('#scoreTrack'),
@@ -22,6 +27,7 @@ const elements = {
   handPanel: document.querySelector('#handPanel'),
   actionPanel: document.querySelector('#actionPanel'),
   soundToggleButton: document.querySelector('#soundToggleButton'),
+  inviteButton: document.querySelector('#inviteButton'),
   cinematicLayer: document.querySelector('#cinematicLayer'),
   toastStack: document.querySelector('#toastStack'),
   copyCodeButton: document.querySelector('#copyCodeButton'),
@@ -52,6 +58,7 @@ let soundEnabled = localStorage.getItem('secret-letter-sound') !== 'off';
 let audioContext = null;
 let cinematicQueue = [];
 let isCinematicPlaying = false;
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 updateSoundButton();
 
@@ -65,6 +72,7 @@ elements.roomCode.value = localStorage.getItem('secret-letter-room') || '';
 elements.createRoomButton.addEventListener('click', () => {
   unlockAudio();
   playSound('tap');
+  vibrate(8);
   const name = elements.playerName.value.trim();
   const password = elements.roomPassword.value.trim();
   setError('');
@@ -75,6 +83,7 @@ elements.joinForm.addEventListener('submit', (event) => {
   event.preventDefault();
   unlockAudio();
   playSound('tap');
+  vibrate(8);
   const name = elements.playerName.value.trim();
   const roomCode = elements.roomCode.value.trim();
   const password = elements.roomPassword.value.trim();
@@ -92,12 +101,37 @@ elements.soundToggleButton?.addEventListener('click', () => {
   }
 });
 
+elements.commandOpenButton?.addEventListener('click', () => {
+  openCommandDialog();
+});
+
+elements.commandOpenGameButton?.addEventListener('click', () => {
+  openCommandDialog();
+});
+
+elements.commandCloseButton?.addEventListener('click', () => {
+  elements.commandDialog?.close();
+});
+
+document.addEventListener('keydown', (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    openCommandDialog();
+  }
+});
+
+elements.inviteButton?.addEventListener('click', () => {
+  playSound('tap');
+  shareRoom();
+});
+
 elements.copyCodeButton.addEventListener('click', async () => {
   if (!state?.roomCode) {
     return;
   }
   unlockAudio();
   playSound('tap');
+  vibrate(5);
   await navigator.clipboard?.writeText(state.roomCode);
   elements.copyCodeButton.textContent = 'コピー済み';
   window.setTimeout(() => {
@@ -107,11 +141,15 @@ elements.copyCodeButton.addEventListener('click', async () => {
 
 elements.leaveButton.addEventListener('click', () => {
   playSound('tap');
+  vibrate(8);
   socket.emit('leaveRoom', {}, () => {
     state = null;
     selectedCardUid = '';
-    elements.joinPanel.classList.remove('hidden');
-    elements.gamePanel.classList.add('hidden');
+    withViewTransition(() => {
+      elements.joinPanel.classList.remove('hidden');
+      elements.gamePanel.classList.add('hidden');
+      renderRoomList();
+    });
   });
 });
 
@@ -121,9 +159,11 @@ socket.on('stateUpdate', (nextState) => {
   selectedCardUid = keepSelectedCard(nextState) ? selectedCardUid : '';
   localStorage.setItem('secret-letter-room', nextState.roomCode);
   localStorage.setItem('secret-letter-name', nextState.you?.name || elements.playerName.value.trim());
-  elements.joinPanel.classList.add('hidden');
-  elements.gamePanel.classList.remove('hidden');
-  render();
+  withViewTransition(() => {
+    elements.joinPanel.classList.add('hidden');
+    elements.gamePanel.classList.remove('hidden');
+    render();
+  });
   reactToStateChange(previousState, nextState);
 });
 
@@ -133,7 +173,7 @@ socket.on('connect_error', () => {
 
 socket.on('roomListUpdate', (rooms) => {
   roomSummaries = Array.isArray(rooms) ? rooms : [];
-  renderRoomList();
+  withViewTransition(() => renderRoomList());
 });
 
 requestRoomList();
@@ -173,6 +213,7 @@ function renderRoomList() {
       const locked = button.dataset.locked === 'true';
       elements.roomCode.value = code;
       playSound('select');
+      vibrate(6);
 
       if (locked) {
         elements.roomPassword.focus();
@@ -203,6 +244,124 @@ function renderRoomCard(room) {
       </span>
     </button>
   `;
+}
+
+function withViewTransition(update) {
+  if (!document.startViewTransition || prefersReducedMotion.matches) {
+    update();
+    return;
+  }
+
+  document.startViewTransition(update);
+}
+
+function openCommandDialog() {
+  if (!elements.commandDialog || !elements.commandList) {
+    return;
+  }
+
+  renderCommandList();
+  if (!elements.commandDialog.open) {
+    elements.commandDialog.showModal();
+  }
+  elements.commandDialog.querySelector('[data-command]')?.focus();
+  playSound('tap');
+}
+
+function renderCommandList() {
+  const inGame = Boolean(state?.roomCode);
+  const selectedRoomCode = elements.roomCode.value.trim();
+  const selectedRoom = roomSummaries.find((room) => room.code === selectedRoomCode.toUpperCase());
+
+  const commands = [
+    { id: 'create-room', title: '部屋を作る', detail: '名前と任意の合言葉で新しい卓を作成', disabled: inGame },
+    { id: 'join-room', title: '選択中の部屋に参加', detail: selectedRoom ? `${selectedRoom.code} / ${selectedRoom.locked ? '鍵付き' : '公開'}` : '部屋一覧かコード入力から選択', disabled: inGame || !selectedRoomCode },
+    { id: 'focus-room-code', title: '部屋コード入力へ移動', detail: 'コードを手入力して参加', disabled: inGame },
+    { id: 'toggle-sound', title: soundEnabled ? '音をOFFにする' : '音をONにする', detail: '効果音の切り替え', disabled: false },
+    { id: 'invite-room', title: '部屋を招待する', detail: inGame ? `${state.roomCode} を共有` : '部屋に入ると使えます', disabled: !inGame },
+    { id: 'copy-room', title: '部屋コードをコピー', detail: inGame ? state.roomCode : '部屋に入ると使えます', disabled: !inGame }
+  ];
+
+  elements.commandList.innerHTML = commands
+    .map(
+      (command) => `
+        <button class="command-item" type="button" data-command="${command.id}" ${command.disabled ? 'disabled' : ''}>
+          <span>${escapeHtml(command.title)}</span>
+          <small>${escapeHtml(command.detail)}</small>
+        </button>
+      `
+    )
+    .join('');
+
+  elements.commandList.querySelectorAll('[data-command]').forEach((button) => {
+    button.addEventListener('click', () => runCommand(button.dataset.command));
+  });
+}
+
+function runCommand(command) {
+  elements.commandDialog?.close();
+  playSound('select');
+  vibrate(8);
+
+  if (command === 'create-room') {
+    elements.createRoomButton.click();
+    return;
+  }
+
+  if (command === 'join-room') {
+    elements.joinForm.requestSubmit();
+    return;
+  }
+
+  if (command === 'focus-room-code') {
+    elements.roomCode.focus();
+    elements.roomCode.select();
+    return;
+  }
+
+  if (command === 'toggle-sound') {
+    elements.soundToggleButton?.click();
+    return;
+  }
+
+  if (command === 'invite-room') {
+    shareRoom();
+    return;
+  }
+
+  if (command === 'copy-room') {
+    elements.copyCodeButton.click();
+  }
+}
+
+async function shareRoom() {
+  if (!state?.roomCode) {
+    return;
+  }
+
+  const invitation = `Secret Letter Table の部屋 ${state.roomCode} で待っています。`;
+  const url = window.location.origin;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Secret Letter Table', text: invitation, url });
+      showToast('招待を開きました', '共有先を選んでください。', 'success');
+      return;
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return;
+    }
+  }
+
+  await navigator.clipboard?.writeText(`${invitation}\n${url}`);
+  showToast('招待文をコピーしました', state.roomCode, 'success');
+}
+
+function vibrate(pattern) {
+  if ('vibrate' in navigator && !prefersReducedMotion.matches) {
+    navigator.vibrate(pattern);
+  }
 }
 
 function render() {
@@ -752,17 +911,20 @@ function reactToStateChange(previousState, nextState) {
 
   if (previousInsight !== nextInsight && nextState.you?.insight) {
     playSound('reveal');
+    vibrate([8, 24, 8]);
     showToast('占い結果を確認しました', '秘密メモに表示しています。', 'reveal');
   }
 
   if (previousLastCardUid !== nextLastCardUid && nextState.lastPlayed) {
     playSound('card');
+    vibrate(10);
     showToast(`${nextState.lastPlayed.playerName} が ${nextState.lastPlayed.card.name}`, 'カードを解決中。', 'card');
     showCardSpotlight(nextState.lastPlayed);
   }
 
   newEliminations.forEach((player) => {
     playSound('eliminate');
+    vibrate([20, 30, 35]);
     showToast(`${player.name} が脱落`, 'このラウンドから離脱しました。', 'eliminate');
     showEliminationCinematic(player);
   });
@@ -770,9 +932,11 @@ function reactToStateChange(previousState, nextState) {
   if (previousState.phase !== nextState.phase) {
     if (nextState.phase === 'playing') {
       playSound('start');
+      vibrate(12);
       showToast('ラウンド開始', '手札を確認しましょう。', 'start');
     } else if (nextState.phase === 'roundOver' || nextState.phase === 'gameOver') {
       playSound('winner');
+      vibrate([12, 32, 12, 32, 18]);
       showToast(phaseLabels[nextState.phase], getWinnerText(nextState), 'finish');
       showWinnerCinematic(nextState);
     }

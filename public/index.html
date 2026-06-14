@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1d614f" />
     <title>Secret Letter Table</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -15,6 +16,7 @@
             <p class="eyebrow">Realtime web board game</p>
             <h1 id="gameTitle">Secret Letter Table</h1>
           </div>
+          <button class="secondary-button compact command-open-button" id="commandOpenButton" type="button">⌘K</button>
         </div>
 
         <div class="table-teaser" aria-hidden="true">
@@ -69,7 +71,9 @@
             <h2 id="phaseTitle">ロビー</h2>
           </div>
           <div class="header-actions">
+            <button class="secondary-button compact" id="commandOpenGameButton" type="button">⌘K</button>
             <button class="secondary-button compact" id="soundToggleButton" type="button" aria-pressed="true">音 ON</button>
+            <button class="secondary-button compact" id="inviteButton" type="button">招待</button>
             <button class="secondary-button compact" id="copyCodeButton" type="button">コードをコピー</button>
             <button class="ghost-button compact" id="leaveButton" type="button">退室</button>
           </div>
@@ -100,6 +104,16 @@
     </main>
     <div class="cinematic-layer" id="cinematicLayer" aria-live="assertive" aria-label="ゲーム演出"></div>
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-label="ゲーム通知"></div>
+    <dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">
+      <div class="command-dialog-head">
+        <div>
+          <p class="eyebrow">Quick actions</p>
+          <h2 id="commandDialogTitle">コマンド</h2>
+        </div>
+        <button class="ghost-button compact" id="commandCloseButton" type="button">閉じる</button>
+      </div>
+      <div class="command-list" id="commandList"></div>
+    </dialog>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
