@@ -1022,13 +1022,6 @@ function reactToStateChange(previousState, nextState) {
   const previousEffectId = previousState.lastEffect?.id || "";
   const nextEffectId = nextState.lastEffect?.id || "";
 
-  if (previousInsight !== nextInsight && nextState.you?.insight) {
-    playSound("reveal");
-    vibrate([8, 24, 8]);
-    showToast("占い結果を確認しました", "ポップアップに表示しています。", "reveal");
-    showPeekCinematic(nextState.you.insight);
-  }
-
   if (previousLastCardUid !== nextLastCardUid && nextState.lastPlayed) {
     playSound("card");
     vibrate(10);
@@ -1046,6 +1039,13 @@ function reactToStateChange(previousState, nextState) {
       );
       showCardSpotlight(nextState.lastPlayed);
     }
+  }
+
+  if (previousInsight !== nextInsight && nextState.you?.insight) {
+    playSound("reveal");
+    vibrate([8, 24, 8]);
+    showToast("占い結果を確認しました", "ポップアップに表示しています。", "reveal");
+    showPeekCinematic(nextState.you.insight);
   }
 
   if (previousEffectId !== nextEffectId && nextState.lastEffect) {
