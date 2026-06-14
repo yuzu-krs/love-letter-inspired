@@ -951,35 +951,6 @@ select:focus {
     box-shadow 0.16s ease;
 }
 
-.card-hover-tip {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 48px;
-  z-index: 4;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 8px;
-  color: white;
-  background: rgba(23, 22, 26, 0.92);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
-  font-size: 0.82rem;
-  font-weight: 800;
-  line-height: 1.45;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(8px);
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
-}
-
-.game-card:hover .card-hover-tip,
-.game-card:focus-visible .card-hover-tip {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .game-card.selectable:hover,
 .game-card.selected {
   border-color: var(--card-accent, var(--rose));
@@ -1675,6 +1646,7 @@ select:focus {
 }
 
 .cinematic-card-use,
+.cinematic-duel,
 .cinematic-peek,
 .cinematic-discard,
 .cinematic-guard,
@@ -1697,6 +1669,106 @@ select:focus {
   padding: 24px;
   border-color: var(--card-accent, rgba(255, 255, 255, 0.3));
   animation: cardSpotlightIn 0.3s cubic-bezier(0.2, 0.9, 0.2, 1.12);
+}
+
+.cinematic-duel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 28px;
+  border-color: rgba(183, 120, 34, 0.9);
+  background:
+    radial-gradient(circle at center, rgba(255, 244, 216, 0.2), transparent 48%),
+    linear-gradient(135deg, rgba(183, 120, 34, 0.3), rgba(23, 22, 26, 0.96));
+  animation: duelSceneIn 0.24s ease-out;
+}
+
+.duel-card {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.duel-card.left {
+  animation: duelLeftStrike 0.9s ease-in-out infinite alternate;
+}
+
+.duel-card.right {
+  animation: duelRightStrike 0.9s ease-in-out infinite alternate;
+}
+
+.duel-card span {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 900;
+}
+
+.duel-card img {
+  width: min(160px, 26vw);
+  aspect-ratio: 2 / 3;
+  border: 3px solid var(--card-accent, rgba(255, 255, 255, 0.3));
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.38);
+}
+
+.duel-card strong {
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.duel-center {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  min-width: 112px;
+}
+
+.duel-center::before,
+.duel-center::after {
+  content: "";
+  position: absolute;
+  width: 110px;
+  height: 6px;
+  border-radius: 999px;
+  background: #fff4d8;
+  box-shadow: 0 0 18px rgba(255, 244, 216, 0.58);
+}
+
+.duel-center::before {
+  transform: rotate(38deg);
+}
+
+.duel-center::after {
+  transform: rotate(-38deg);
+}
+
+.duel-center span {
+  position: relative;
+  z-index: 1;
+  width: 82px;
+  height: 82px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff4d8;
+  border-radius: 999px;
+  color: var(--ink);
+  background: #fff4d8;
+  font-size: 2rem;
+  font-weight: 900;
+  animation: clashPulse 0.7s ease-in-out infinite alternate;
+}
+
+.duel-center strong {
+  position: relative;
+  z-index: 1;
+  max-width: 160px;
+  color: #fff4d8;
+  text-align: center;
+  text-shadow: 0 8px 18px rgba(0, 0, 0, 0.38);
 }
 
 .cinematic-peek,
@@ -1894,6 +1966,7 @@ select:focus {
 
 @media (max-width: 620px) {
   .cinematic-card-use,
+  .cinematic-duel,
   .cinematic-peek,
   .cinematic-discard,
   .cinematic-guard,
@@ -1917,6 +1990,14 @@ select:focus {
   .slash-mark,
   .guard-orbit {
     justify-self: center;
+  }
+
+  .duel-center {
+    order: 2;
+  }
+
+  .duel-card.right {
+    order: 3;
   }
 }
 
@@ -1996,6 +2077,48 @@ select:focus {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes duelSceneIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes duelLeftStrike {
+  from {
+    transform: translateX(-12px) rotate(-5deg);
+  }
+
+  to {
+    transform: translateX(8px) rotate(2deg);
+  }
+}
+
+@keyframes duelRightStrike {
+  from {
+    transform: translateX(12px) rotate(5deg);
+  }
+
+  to {
+    transform: translateX(-8px) rotate(-2deg);
+  }
+}
+
+@keyframes clashPulse {
+  from {
+    transform: scale(0.94);
+  }
+
+  to {
+    transform: scale(1.08);
   }
 }
 

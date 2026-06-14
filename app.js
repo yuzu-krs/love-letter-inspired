@@ -574,6 +574,22 @@ function applyCardEffect(room, player, card, target, guessValue) {
       }
       const playerCard = player.hand[0];
       const targetCard = target.hand[0];
+      const winnerName =
+        playerCard.value > targetCard.value
+          ? player.name
+          : targetCard.value > playerCard.value
+            ? target.name
+            : "引き分け";
+      room.lastEffect = createEffectEvent("duel", {
+        playerId: player.id,
+        playerName: player.name,
+        targetId: target.id,
+        targetName: target.name,
+        card,
+        playerCard,
+        targetCard,
+        winnerName,
+      });
       room.log.push(
         `${player.name} と ${target.name} が手札の強さを比べました。`,
       );

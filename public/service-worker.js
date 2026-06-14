@@ -1,4 +1,4 @@
-const CACHE_NAME = "secret-letter-table-v3";
+const CACHE_NAME = "secret-letter-table-v4";
 const CORE_ASSETS = [
   "/",
   "/styles.css",

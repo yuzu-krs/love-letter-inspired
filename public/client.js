@@ -727,7 +727,6 @@ function renderCard(card, selectable) {
         <strong>${card.value} ${escapeHtml(card.name)}</strong>
         <small>${escapeHtml(type?.shortEffect || "")}</small>
       </span>
-      <span class="card-hover-tip">${escapeHtml(type?.effect || "")}</span>
     </button>
   `;
 }
@@ -1163,12 +1162,20 @@ function reactToStateChange(previousState, nextState) {
   if (previousLastCardUid !== nextLastCardUid && nextState.lastPlayed) {
     playSound("card");
     vibrate(10);
-    showToast(
-      `${nextState.lastPlayed.playerName} が ${nextState.lastPlayed.card.name}`,
-      "カードを解決中。",
-      "card",
-    );
-    showCardSpotlight(nextState.lastPlayed);
+    if (nextState.lastPlayed.card.key === "duel") {
+      showToast(
+        `${nextState.lastPlayed.playerName} が ${nextState.lastPlayed.card.name}`,
+        "決闘を開始します。",
+        "card",
+      );
+    } else {
+      showToast(
+        `${nextState.lastPlayed.playerName} が ${nextState.lastPlayed.card.name}`,
+        "カードを解決中。",
+        "card",
+      );
+      showCardSpotlight(nextState.lastPlayed);
+    }
   }
 
   if (previousEffectId !== nextEffectId && nextState.lastEffect) {
@@ -1218,6 +1225,20 @@ function getNewEliminations(previousState, nextState) {
 }
 
 function reactToEffectEvent(effect) {
+  if (effect.type === "duel") {
+    playSound("duel");
+    vibrate([14, 18, 18, 18, 26]);
+    showToast(
+      `${effect.playerName} vs ${effect.targetName}`,
+      effect.winnerName === "引き分け"
+        ? "同じ強さでした。"
+        : `${effect.winnerName} が勝ちました。`,
+      "duel",
+    );
+    showDuelCinematic(effect);
+    return;
+  }
+
   if (effect.type === "discard") {
     playSound("discard");
     vibrate([10, 20, 10]);
@@ -1267,6 +1288,34 @@ function showToast(title, message, type = "") {
     toast.classList.add("leaving");
     window.setTimeout(() => toast.remove(), 260);
   }, 2600);
+}
+
+function showDuelCinematic(effect) {
+  if (!effect?.playerCard || !effect?.targetCard) {
+    return;
+  }
+
+  enqueueCinematic(
+    `
+      <article class="cinematic-duel">
+        <div class="duel-card left tone-${effect.playerCard.tone}">
+          <span>${escapeHtml(effect.playerName)}</span>
+          <img src="${getCardImage(effect.playerCard)}" alt="${escapeHtml(effect.playerCard.name)}" />
+          <strong>${effect.playerCard.value} ${escapeHtml(effect.playerCard.name)}</strong>
+        </div>
+        <div class="duel-center">
+          <span>VS</span>
+          <strong>${escapeHtml(effect.winnerName === "引き分け" ? "DRAW" : `${effect.winnerName} WIN`)}</strong>
+        </div>
+        <div class="duel-card right tone-${effect.targetCard.tone}">
+          <span>${escapeHtml(effect.targetName)}</span>
+          <img src="${getCardImage(effect.targetCard)}" alt="${escapeHtml(effect.targetCard.name)}" />
+          <strong>${effect.targetCard.value} ${escapeHtml(effect.targetCard.name)}</strong>
+        </div>
+      </article>
+    `,
+    "duel",
+  );
 }
 
 function showPeekCinematic(insight) {
@@ -1404,7 +1453,7 @@ function playNextCinematic() {
   elements.cinematicLayer.innerHTML = `
     <div class="cinematic-stage">
       ${item.markup}
-      <button class="cinematic-dismiss" type="button">クリック / Enter で閉じる</button>
+      <button class="cinematic-dismiss" type="button">クリック / Enter でスキップ</button>
     </div>
   `;
   elements.cinematicLayer.tabIndex = -1;
@@ -1415,6 +1464,18 @@ function playNextCinematic() {
       event.stopPropagation();
       dismissCinematic();
     });
+  window.setTimeout(() => {
+    if (isCinematicPlaying) {
+      dismissCinematic();
+    }
+  }, getCinematicDuration(item.type));
+}
+
+function getCinematicDuration(type) {
+  if (type === "winner") return 4200;
+  if (type === "duel") return 3900;
+  if (["discard", "peek", "guard"].includes(type)) return 3600;
+  return 3200;
 }
 
 function dismissCinematic() {
@@ -1483,6 +1544,12 @@ function playSound(type) {
     reveal: [
       [620, 0.07, "sine", 0],
       [920, 0.1, "triangle", 0.06],
+    ],
+    duel: [
+      [220, 0.05, "sawtooth", 0],
+      [330, 0.06, "triangle", 0.08],
+      [180, 0.07, "sawtooth", 0.18],
+      [620, 0.09, "triangle", 0.3],
     ],
     discard: [
       [290, 0.06, "triangle", 0],
