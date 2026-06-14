@@ -22,6 +22,7 @@ const elements = {
   handPanel: document.querySelector('#handPanel'),
   actionPanel: document.querySelector('#actionPanel'),
   soundToggleButton: document.querySelector('#soundToggleButton'),
+  cinematicLayer: document.querySelector('#cinematicLayer'),
   toastStack: document.querySelector('#toastStack'),
   copyCodeButton: document.querySelector('#copyCodeButton'),
   leaveButton: document.querySelector('#leaveButton')
@@ -49,6 +50,8 @@ let selectedCardUid = '';
 let isRulebookOpen = true;
 let soundEnabled = localStorage.getItem('secret-letter-sound') !== 'off';
 let audioContext = null;
+let cinematicQueue = [];
+let isCinematicPlaying = false;
 
 updateSoundButton();
 
@@ -745,28 +748,40 @@ function reactToStateChange(previousState, nextState) {
   const nextLastCardUid = nextState.lastPlayed?.card?.uid || '';
   const previousInsight = JSON.stringify(previousState.you?.insight || null);
   const nextInsight = JSON.stringify(nextState.you?.insight || null);
+  const newEliminations = getNewEliminations(previousState, nextState);
 
   if (previousInsight !== nextInsight && nextState.you?.insight) {
     playSound('reveal');
     showToast('占い結果を確認しました', '秘密メモに表示しています。', 'reveal');
-    return;
   }
+
+  if (previousLastCardUid !== nextLastCardUid && nextState.lastPlayed) {
+    playSound('card');
+    showToast(`${nextState.lastPlayed.playerName} が ${nextState.lastPlayed.card.name}`, 'カードを解決中。', 'card');
+    showCardSpotlight(nextState.lastPlayed);
+  }
+
+  newEliminations.forEach((player) => {
+    playSound('eliminate');
+    showToast(`${player.name} が脱落`, 'このラウンドから離脱しました。', 'eliminate');
+    showEliminationCinematic(player);
+  });
 
   if (previousState.phase !== nextState.phase) {
     if (nextState.phase === 'playing') {
       playSound('start');
       showToast('ラウンド開始', '手札を確認しましょう。', 'start');
     } else if (nextState.phase === 'roundOver' || nextState.phase === 'gameOver') {
-      playSound('finish');
+      playSound('winner');
       showToast(phaseLabels[nextState.phase], getWinnerText(nextState), 'finish');
+      showWinnerCinematic(nextState);
     }
-    return;
   }
+}
 
-  if (previousLastCardUid !== nextLastCardUid && nextState.lastPlayed) {
-    playSound('card');
-    showToast(`${nextState.lastPlayed.playerName} が ${nextState.lastPlayed.card.name}`, '効果を解決しました。', 'card');
-  }
+function getNewEliminations(previousState, nextState) {
+  const previousPlayers = new Map(previousState.players.map((player) => [player.id, player]));
+  return nextState.players.filter((player) => player.eliminated && !previousPlayers.get(player.id)?.eliminated);
 }
 
 function getWinnerText(nextState) {
@@ -794,6 +809,88 @@ function showToast(title, message, type = '') {
     toast.classList.add('leaving');
     window.setTimeout(() => toast.remove(), 260);
   }, 2600);
+}
+
+function showCardSpotlight(action) {
+  const card = action.card;
+  if (!card) {
+    return;
+  }
+
+  enqueueCinematic(
+    `
+      <article class="cinematic-card-use tone-${card.tone}">
+        <div class="cinematic-ribbon">CARD PLAY</div>
+        <img src="${getCardImage(card)}" alt="${escapeHtml(card.name)}" />
+        <div class="cinematic-copy">
+          <span>${escapeHtml(action.playerName)} が使用</span>
+          <strong>${card.value} ${escapeHtml(card.name)}</strong>
+          <p>${escapeHtml(getCardType(card.value)?.effect || '')}</p>
+        </div>
+      </article>
+    `,
+    'card-use'
+  );
+}
+
+function showEliminationCinematic(player) {
+  enqueueCinematic(
+    `
+      <article class="cinematic-elimination">
+        <div class="slash-mark">×</div>
+        <div>
+          <span>ELIMINATED</span>
+          <strong>${escapeHtml(player.name)}</strong>
+          <p>このラウンドから脱落しました。</p>
+        </div>
+      </article>
+    `,
+    'elimination'
+  );
+}
+
+function showWinnerCinematic(nextState) {
+  const winners = nextState.players.filter((player) => nextState.roundWinnerIds.includes(player.id));
+  const title = nextState.phase === 'gameOver' ? 'GAME WINNER' : 'ROUND WINNER';
+  const names = winners.map((player) => player.name).join('、') || '勝者なし';
+
+  enqueueCinematic(
+    `
+      <article class="cinematic-winner">
+        <div class="winner-rays"></div>
+        <span>${title}</span>
+        <strong>${escapeHtml(names)}</strong>
+        <p>${nextState.phase === 'gameOver' ? 'ゲームに勝利しました。' : 'ラウンドを制しました。'}</p>
+      </article>
+    `,
+    'winner'
+  );
+}
+
+function enqueueCinematic(markup, type) {
+  cinematicQueue.push({ markup, type });
+  playNextCinematic();
+}
+
+function playNextCinematic() {
+  if (isCinematicPlaying || !elements.cinematicLayer || cinematicQueue.length === 0) {
+    return;
+  }
+
+  const item = cinematicQueue.shift();
+  isCinematicPlaying = true;
+  elements.cinematicLayer.className = `cinematic-layer show ${item.type}`;
+  elements.cinematicLayer.innerHTML = item.markup;
+
+  window.setTimeout(() => {
+    elements.cinematicLayer.classList.add('leaving');
+    window.setTimeout(() => {
+      elements.cinematicLayer.className = 'cinematic-layer';
+      elements.cinematicLayer.innerHTML = '';
+      isCinematicPlaying = false;
+      playNextCinematic();
+    }, 360);
+  }, item.type === 'winner' ? 2400 : 1900);
 }
 
 function updateSoundButton() {
@@ -839,6 +936,8 @@ function playSound(type) {
     reveal: [[620, 0.07, 'sine', 0], [920, 0.1, 'triangle', 0.06]],
     start: [[330, 0.07, 'triangle', 0], [495, 0.08, 'triangle', 0.07], [660, 0.1, 'triangle', 0.14]],
     finish: [[660, 0.09, 'sine', 0], [880, 0.11, 'triangle', 0.08], [990, 0.14, 'sine', 0.18]],
+    eliminate: [[220, 0.08, 'sawtooth', 0], [150, 0.12, 'sawtooth', 0.09], [90, 0.16, 'triangle', 0.18]],
+    winner: [[523, 0.08, 'triangle', 0], [659, 0.1, 'triangle', 0.08], [784, 0.12, 'triangle', 0.18], [1046, 0.16, 'sine', 0.3]],
     success: [[540, 0.07, 'sine', 0], [760, 0.08, 'triangle', 0.07]],
     error: [[180, 0.08, 'sawtooth', 0], [120, 0.1, 'sawtooth', 0.08]]
   };
