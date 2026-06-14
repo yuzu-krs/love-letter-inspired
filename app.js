@@ -529,16 +529,30 @@ function playCard(room, playerId, cardUid, targetId, guessValue) {
   room.insights.delete(player.id);
   room.log.push(`${player.name} は ${selectedType.name} を出しました。`);
 
-  applyCardEffect(room, player, selectedCard, target.player, guessValue);
+  applyCardEffect(
+    room,
+    player,
+    selectedCard,
+    target.player,
+    guessValue,
+    target.protectedTargets,
+  );
   resolveRoundOrAdvance(room);
   return { ok: true };
 }
 
-function applyCardEffect(room, player, card, target, guessValue) {
+function applyCardEffect(
+  room,
+  player,
+  card,
+  target,
+  guessValue,
+  protectedTargets = [],
+) {
   switch (card.key) {
     case "scout": {
       if (!target || target.hand.length === 0) {
-        room.log.push("有効な対象がいなかったため、効果は発生しませんでした。");
+        logNoTargetEffect(room, protectedTargets);
         return;
       }
       const guessedType = CARD_TYPE_BY_VALUE.get(guessValue);
@@ -553,23 +567,26 @@ function applyCardEffect(room, player, card, target, guessValue) {
       break;
     }
     case "seer": {
-      if (target && target.hand[0]) {
-        room.insights.set(player.id, {
-          id: crypto.randomUUID(),
-          type: "peek",
-          targetId: target.id,
-          targetName: target.name,
-          card: target.hand[0],
-          message: `${target.name} の手札を確認しました。`,
-        });
-        room.log.push(
-          `${player.name} は ${target.name} の手札を確認しました。`,
-        );
+      if (!target || !target.hand[0]) {
+        logNoTargetEffect(room, protectedTargets);
+        return;
       }
+      room.insights.set(player.id, {
+        id: crypto.randomUUID(),
+        type: "peek",
+        targetId: target.id,
+        targetName: target.name,
+        card: target.hand[0],
+        message: `${target.name} の手札を確認しました。`,
+      });
+      room.log.push(
+        `${player.name} は ${target.name} の手札を確認しました。`,
+      );
       break;
     }
     case "duel": {
       if (!target || !target.hand[0] || !player.hand[0]) {
+        logNoTargetEffect(room, protectedTargets);
         return;
       }
       const playerCard = player.hand[0];
@@ -622,6 +639,7 @@ function applyCardEffect(room, player, card, target, guessValue) {
     }
     case "patron": {
       if (!target || target.hand.length === 0) {
+        logNoTargetEffect(room, protectedTargets);
         return;
       }
       const discarded = target.hand.pop();
@@ -650,6 +668,7 @@ function applyCardEffect(room, player, card, target, guessValue) {
     }
     case "envoy": {
       if (!target || !target.hand[0] || !player.hand[0]) {
+        logNoTargetEffect(room, protectedTargets);
         return;
       }
       const targetHand = target.hand;
@@ -733,7 +752,11 @@ function resolveTarget(room, player, cardType, targetId) {
 
   const eligibleTargets = getEligibleTargets(room, player, cardType);
   if (eligibleTargets.length === 0) {
-    return { ok: true, player: null };
+    return {
+      ok: true,
+      player: null,
+      protectedTargets: getProtectedTargets(room, player, cardType),
+    };
   }
 
   const target = eligibleTargets.find((entry) => entry.id === targetId);
@@ -742,6 +765,16 @@ function resolveTarget(room, player, cardType, targetId) {
   }
 
   return { ok: true, player: target };
+}
+
+function logNoTargetEffect(room, protectedTargets = []) {
+  if (protectedTargets.length > 0) {
+    const names = protectedTargets.map((target) => target.name).join("、");
+    room.log.push(`${names} は封蝋の護りに守られました。`);
+    return;
+  }
+
+  room.log.push("有効な対象がいなかったため、効果は発生しませんでした。");
 }
 
 function getEligibleTargets(room, player, cardType) {
@@ -759,6 +792,20 @@ function getEligibleTargets(room, player, cardType) {
     }
 
     return true;
+  });
+}
+
+function getProtectedTargets(room, player, cardType) {
+  return room.players.filter((target) => {
+    if (target.eliminated || !target.connected || target.id === player.id) {
+      return false;
+    }
+
+    if (cardType.targetMode === "opponent" || cardType.targetMode === "any") {
+      return target.protected;
+    }
+
+    return false;
   });
 }
 
