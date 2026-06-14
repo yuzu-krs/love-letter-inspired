@@ -933,6 +933,7 @@ select:focus {
 }
 
 .game-card {
+  position: relative;
   width: 196px;
   min-height: 0;
   display: grid;
@@ -948,6 +949,35 @@ select:focus {
     transform 0.16s ease,
     border-color 0.16s ease,
     box-shadow 0.16s ease;
+}
+
+.card-hover-tip {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 48px;
+  z-index: 4;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  color: white;
+  background: rgba(23, 22, 26, 0.92);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.game-card:hover .card-hover-tip,
+.game-card:focus-visible .card-hover-tip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .game-card.selectable:hover,
@@ -1611,6 +1641,7 @@ select:focus {
 
 .cinematic-layer.show {
   display: grid;
+  pointer-events: auto;
   background:
     radial-gradient(
       circle at center,
@@ -1621,11 +1652,32 @@ select:focus {
   animation: cinematicBackdropIn 0.18s ease-out;
 }
 
+.cinematic-stage {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+}
+
+.cinematic-dismiss {
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: white;
+  background: rgba(23, 22, 26, 0.78);
+  font-size: 0.86rem;
+  font-weight: 900;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
 .cinematic-layer.leaving {
   animation: cinematicBackdropOut 0.34s ease-in forwards;
 }
 
 .cinematic-card-use,
+.cinematic-peek,
+.cinematic-discard,
+.cinematic-guard,
 .cinematic-elimination,
 .cinematic-winner {
   width: min(760px, calc(100vw - 36px));
@@ -1645,6 +1697,75 @@ select:focus {
   padding: 24px;
   border-color: var(--card-accent, rgba(255, 255, 255, 0.3));
   animation: cardSpotlightIn 0.3s cubic-bezier(0.2, 0.9, 0.2, 1.12);
+}
+
+.cinematic-peek,
+.cinematic-discard {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(170px, 230px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  padding: 24px;
+  border-color: var(--card-accent, rgba(255, 255, 255, 0.3));
+  animation: cardSpotlightIn 0.3s cubic-bezier(0.2, 0.9, 0.2, 1.12);
+}
+
+.cinematic-peek {
+  background:
+    linear-gradient(135deg, rgba(68, 118, 181, 0.3), rgba(23, 22, 26, 0.94)),
+    rgba(23, 22, 26, 0.94);
+}
+
+.cinematic-discard {
+  background:
+    linear-gradient(135deg, rgba(135, 96, 168, 0.28), rgba(23, 22, 26, 0.94)),
+    rgba(23, 22, 26, 0.94);
+}
+
+.cinematic-peek img,
+.cinematic-discard img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.38);
+}
+
+.cinematic-guard {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  padding: 28px;
+  border-color: rgba(55, 128, 95, 0.78);
+  background:
+    radial-gradient(circle at 76px 76px, rgba(255, 244, 216, 0.2), transparent 44%),
+    linear-gradient(135deg, rgba(55, 128, 95, 0.34), rgba(23, 22, 26, 0.94));
+  animation: guardIn 0.34s ease-out;
+}
+
+.guard-orbit {
+  width: 128px;
+  height: 128px;
+  display: grid;
+  place-items: center;
+  border: 3px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(55, 128, 95, 0.72);
+  box-shadow:
+    0 0 0 12px rgba(55, 128, 95, 0.18),
+    0 22px 40px rgba(0, 0, 0, 0.28);
+}
+
+.guard-orbit span {
+  width: 58px;
+  height: 70px;
+  border: 4px solid white;
+  border-top-width: 8px;
+  border-radius: 30px 30px 18px 18px;
+  clip-path: polygon(50% 0, 100% 18%, 86% 78%, 50% 100%, 14% 78%, 0 18%);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .cinematic-card-use img {
@@ -1773,12 +1894,17 @@ select:focus {
 
 @media (max-width: 620px) {
   .cinematic-card-use,
+  .cinematic-peek,
+  .cinematic-discard,
+  .cinematic-guard,
   .cinematic-elimination {
     grid-template-columns: 1fr;
     text-align: center;
   }
 
-  .cinematic-card-use img {
+  .cinematic-card-use img,
+  .cinematic-peek img,
+  .cinematic-discard img {
     width: min(100%, 220px);
     justify-self: center;
   }
@@ -1788,7 +1914,8 @@ select:focus {
     transform: translateX(-50%);
   }
 
-  .slash-mark {
+  .slash-mark,
+  .guard-orbit {
     justify-self: center;
   }
 }
@@ -1897,6 +2024,18 @@ select:focus {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes guardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

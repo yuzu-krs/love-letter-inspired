@@ -82,6 +82,17 @@ document.addEventListener("click", (event) => {
   }
 });
 
+elements.cinematicLayer?.addEventListener("click", () => {
+  dismissCinematic();
+});
+
+elements.cinematicLayer?.addEventListener("keydown", (event) => {
+  if (["Escape", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    dismissCinematic();
+  }
+});
+
 elements.playerName.value = localStorage.getItem("secret-letter-name") || "";
 elements.roomCode.value = localStorage.getItem("secret-letter-room") || "";
 
@@ -158,6 +169,12 @@ window.addEventListener("offline", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (isCinematicPlaying && ["Escape", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    dismissCinematic();
+    return;
+  }
+
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     openCommandDialog();
@@ -710,6 +727,7 @@ function renderCard(card, selectable) {
         <strong>${card.value} ${escapeHtml(card.name)}</strong>
         <small>${escapeHtml(type?.shortEffect || "")}</small>
       </span>
+      <span class="card-hover-tip">${escapeHtml(type?.effect || "")}</span>
     </button>
   `;
 }
@@ -1046,7 +1064,7 @@ function getActionWaitText() {
 }
 
 function getCardType(value) {
-  return state.cardTypes.find((card) => card.value === value);
+  return state?.cardTypes?.find((card) => card.value === value) || null;
 }
 
 function getCardImage(card) {
@@ -1132,11 +1150,14 @@ function reactToStateChange(previousState, nextState) {
   const previousInsight = JSON.stringify(previousState.you?.insight || null);
   const nextInsight = JSON.stringify(nextState.you?.insight || null);
   const newEliminations = getNewEliminations(previousState, nextState);
+  const previousEffectId = previousState.lastEffect?.id || "";
+  const nextEffectId = nextState.lastEffect?.id || "";
 
   if (previousInsight !== nextInsight && nextState.you?.insight) {
     playSound("reveal");
     vibrate([8, 24, 8]);
-    showToast("占い結果を確認しました", "秘密メモに表示しています。", "reveal");
+    showToast("占い結果を確認しました", "ポップアップに表示しています。", "reveal");
+    showPeekCinematic(nextState.you.insight);
   }
 
   if (previousLastCardUid !== nextLastCardUid && nextState.lastPlayed) {
@@ -1148,6 +1169,10 @@ function reactToStateChange(previousState, nextState) {
       "card",
     );
     showCardSpotlight(nextState.lastPlayed);
+  }
+
+  if (previousEffectId !== nextEffectId && nextState.lastEffect) {
+    reactToEffectEvent(nextState.lastEffect);
   }
 
   newEliminations.forEach((player) => {
@@ -1192,6 +1217,31 @@ function getNewEliminations(previousState, nextState) {
   );
 }
 
+function reactToEffectEvent(effect) {
+  if (effect.type === "discard") {
+    playSound("discard");
+    vibrate([10, 20, 10]);
+    showToast(
+      `${effect.targetName} が ${effect.discarded.name} を捨てました`,
+      "捨て札を確認できます。",
+      "card",
+    );
+    showDiscardCinematic(effect);
+    return;
+  }
+
+  if (effect.type === "guard") {
+    playSound("guard");
+    vibrate(14);
+    showToast(
+      `${effect.playerName} が護られました`,
+      "次の自分の番まで対象になりません。",
+      "guard",
+    );
+    showGuardCinematic(effect);
+  }
+}
+
 function getWinnerText(nextState) {
   const names = nextState.players
     .filter((player) => nextState.roundWinnerIds.includes(player.id))
@@ -1217,6 +1267,63 @@ function showToast(title, message, type = "") {
     toast.classList.add("leaving");
     window.setTimeout(() => toast.remove(), 260);
   }, 2600);
+}
+
+function showPeekCinematic(insight) {
+  if (!insight?.card) {
+    return;
+  }
+
+  enqueueCinematic(
+    `
+      <article class="cinematic-peek tone-${insight.card.tone}">
+        <img src="${getCardImage(insight.card)}" alt="${escapeHtml(insight.card.name)}" />
+        <div class="cinematic-copy">
+          <span>PEEK RESULT</span>
+          <strong>${escapeHtml(insight.targetName)} は ${insight.card.value} ${escapeHtml(insight.card.name)} でした</strong>
+          <p>${escapeHtml(getCardType(insight.card.value)?.effect || "")}</p>
+        </div>
+      </article>
+    `,
+    "peek",
+  );
+}
+
+function showDiscardCinematic(effect) {
+  if (!effect?.discarded) {
+    return;
+  }
+
+  enqueueCinematic(
+    `
+      <article class="cinematic-discard tone-${effect.discarded.tone}">
+        <div class="cinematic-ribbon">DISCARD</div>
+        <img src="${getCardImage(effect.discarded)}" alt="${escapeHtml(effect.discarded.name)}" />
+        <div class="cinematic-copy">
+          <span>${escapeHtml(effect.playerName)} の効果</span>
+          <strong>${escapeHtml(effect.targetName)} は ${effect.discarded.value} ${escapeHtml(effect.discarded.name)} を捨てました</strong>
+          <p>${escapeHtml(getCardType(effect.discarded.value)?.effect || "")}</p>
+        </div>
+      </article>
+    `,
+    "discard",
+  );
+}
+
+function showGuardCinematic(effect) {
+  enqueueCinematic(
+    `
+      <article class="cinematic-guard">
+        <div class="guard-orbit"><span></span></div>
+        <div class="cinematic-copy">
+          <span>PROTECTED</span>
+          <strong>${escapeHtml(effect.playerName)} は護られました</strong>
+          <p>次の自分の番まで、相手の効果の対象になりません。</p>
+        </div>
+      </article>
+    `,
+    "guard",
+  );
 }
 
 function showCardSpotlight(action) {
@@ -1294,20 +1401,34 @@ function playNextCinematic() {
   const item = cinematicQueue.shift();
   isCinematicPlaying = true;
   elements.cinematicLayer.className = `cinematic-layer show ${item.type}`;
-  elements.cinematicLayer.innerHTML = item.markup;
+  elements.cinematicLayer.innerHTML = `
+    <div class="cinematic-stage">
+      ${item.markup}
+      <button class="cinematic-dismiss" type="button">クリック / Enter で閉じる</button>
+    </div>
+  `;
+  elements.cinematicLayer.tabIndex = -1;
+  elements.cinematicLayer.focus({ preventScroll: true });
+  elements.cinematicLayer
+    .querySelector(".cinematic-dismiss")
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      dismissCinematic();
+    });
+}
 
-  window.setTimeout(
-    () => {
-      elements.cinematicLayer.classList.add("leaving");
-      window.setTimeout(() => {
-        elements.cinematicLayer.className = "cinematic-layer";
-        elements.cinematicLayer.innerHTML = "";
-        isCinematicPlaying = false;
-        playNextCinematic();
-      }, 360);
-    },
-    item.type === "winner" ? 2400 : 1900,
-  );
+function dismissCinematic() {
+  if (!isCinematicPlaying || !elements.cinematicLayer) {
+    return;
+  }
+
+  elements.cinematicLayer.classList.add("leaving");
+  window.setTimeout(() => {
+    elements.cinematicLayer.className = "cinematic-layer";
+    elements.cinematicLayer.innerHTML = "";
+    isCinematicPlaying = false;
+    playNextCinematic();
+  }, 260);
 }
 
 function updateSoundButton() {
@@ -1362,6 +1483,15 @@ function playSound(type) {
     reveal: [
       [620, 0.07, "sine", 0],
       [920, 0.1, "triangle", 0.06],
+    ],
+    discard: [
+      [290, 0.06, "triangle", 0],
+      [220, 0.08, "sine", 0.07],
+    ],
+    guard: [
+      [420, 0.08, "sine", 0],
+      [630, 0.1, "triangle", 0.08],
+      [840, 0.12, "sine", 0.18],
     ],
     start: [
       [330, 0.07, "triangle", 0],

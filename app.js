@@ -417,6 +417,7 @@ function createRoom(code, hostId, hostName, password) {
     currentTurnIndex: 0,
     roundWinnerIds: [],
     lastPlayed: null,
+    lastEffect: null,
     log: [`${hostName} が部屋を作りました。`],
     insights: new Map(),
   };
@@ -442,6 +443,7 @@ function startRound(room) {
   room.round += 1;
   room.roundWinnerIds = [];
   room.lastPlayed = null;
+  room.lastEffect = null;
   room.insights.clear();
   room.deck = shuffle(buildDeck());
   room.burnCard = draw(room.deck);
@@ -553,6 +555,7 @@ function applyCardEffect(room, player, card, target, guessValue) {
     case "seer": {
       if (target && target.hand[0]) {
         room.insights.set(player.id, {
+          id: crypto.randomUUID(),
           type: "peek",
           targetId: target.id,
           targetName: target.name,
@@ -593,6 +596,11 @@ function applyCardEffect(room, player, card, target, guessValue) {
     }
     case "veil": {
       player.protected = true;
+      room.lastEffect = createEffectEvent("guard", {
+        playerId: player.id,
+        playerName: player.name,
+        card,
+      });
       room.log.push(`${player.name} は次の自分の番まで守られます。`);
       break;
     }
@@ -602,6 +610,14 @@ function applyCardEffect(room, player, card, target, guessValue) {
       }
       const discarded = target.hand.pop();
       target.discard.push(discarded);
+      room.lastEffect = createEffectEvent("discard", {
+        playerId: player.id,
+        playerName: player.name,
+        targetId: target.id,
+        targetName: target.name,
+        card,
+        discarded,
+      });
       room.log.push(`${target.name} は ${discarded.name} を捨てました。`);
       if (discarded.key === "sealedLetter") {
         eliminatePlayer(room, target, "密書を捨てたため脱落しました。");
@@ -882,6 +898,7 @@ function serializeRoom(room, viewerId) {
     deckCount: room.deck.length,
     roundWinnerIds: room.roundWinnerIds,
     lastPlayed: room.lastPlayed,
+    lastEffect: room.lastEffect,
     log: room.log.slice(-18),
     rules: GAME_RULES,
     cardTypes: CARD_TYPES.map((card) => ({ ...card })),
@@ -962,6 +979,7 @@ function resetRoomToLobby(room, message) {
   room.currentTurnIndex = 0;
   room.roundWinnerIds = [];
   room.lastPlayed = null;
+  room.lastEffect = null;
   room.insights.clear();
   room.players.forEach((player) => {
     player.hand = [];
@@ -1007,6 +1025,14 @@ function cleanName(name) {
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .trim()
     .slice(0, 18);
+}
+
+function createEffectEvent(type, payload) {
+  return {
+    id: crypto.randomUUID(),
+    type,
+    ...payload,
+  };
 }
 
 function cleanPassword(password) {
