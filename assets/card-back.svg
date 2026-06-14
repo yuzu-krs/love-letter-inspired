@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 220" role="img" aria-labelledby="title">
+  <title id="title">Secret letter card back</title>
+  <defs>
+    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff7df"/>
+      <stop offset="1" stop-color="#e9c56d"/>
+    </linearGradient>
+    <linearGradient id="seal" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#d95d72"/>
+      <stop offset="1" stop-color="#8f213b"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="144" height="204" rx="12" fill="#2c5c50"/>
+  <rect x="17" y="17" width="126" height="186" rx="8" fill="url(#paper)"/>
+  <path d="M31 62h98v95H31z" fill="#fffaf0" stroke="#b9912e" stroke-width="4"/>
+  <path d="M31 62l49 45 49-45M31 157l38-42M129 157l-38-42" fill="none" stroke="#b9912e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="80" cy="118" r="25" fill="url(#seal)"/>
+  <path d="M68 119c11-15 29-10 25 4-3 12-18 18-25 25-7-7-22-13-25-25-4-14 14-19 25-4z" fill="#fff4d8" transform="translate(12 -15) scale(.85)"/>
+  <path d="M24 32h112M24 188h112" stroke="#2c5c50" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+</svg>

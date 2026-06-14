@@ -1,0 +1,17 @@
+{
+  "name": "love-letter-inspired",
+  "version": "0.1.0",
+  "description": "A realtime browser card game inspired by deduction letter games.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "check": "node --check app.js && node --check public/client.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
