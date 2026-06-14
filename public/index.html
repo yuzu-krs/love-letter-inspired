@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#1d614f" />
     <title>Secret Letter Table</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -16,13 +17,38 @@
             <p class="eyebrow">Realtime web board game</p>
             <h1 id="gameTitle">Secret Letter Table</h1>
           </div>
-          <button class="secondary-button compact command-open-button" id="commandOpenButton" type="button">⌘K</button>
+          <button
+            class="secondary-button compact command-open-button"
+            id="commandOpenButton"
+            type="button"
+          >
+            ⌘K
+          </button>
+          <button
+            class="secondary-button compact install-button hidden"
+            id="installButton"
+            type="button"
+          >
+            インストール
+          </button>
         </div>
 
         <div class="table-teaser" aria-hidden="true">
-          <img class="teaser-card teaser-card-one" src="/assets/cards/01-scout.png" alt="" />
-          <img class="teaser-card teaser-card-two" src="/assets/card-back.svg" alt="" />
-          <img class="teaser-card teaser-card-three" src="/assets/cards/08-sealed-letter.png" alt="" />
+          <img
+            class="teaser-card teaser-card-one"
+            src="/assets/cards/01-scout.png"
+            alt=""
+          />
+          <img
+            class="teaser-card teaser-card-two"
+            src="/assets/card-back.svg"
+            alt=""
+          />
+          <img
+            class="teaser-card teaser-card-three"
+            src="/assets/cards/08-sealed-letter.png"
+            alt=""
+          />
           <div class="teaser-copy">
             <span>読み合いの卓</span>
             <strong>作って、選んで、すぐ合流</strong>
@@ -32,18 +58,39 @@
         <form class="join-form" id="joinForm">
           <label>
             名前
-            <input id="playerName" name="name" maxlength="18" autocomplete="nickname" required />
+            <input
+              id="playerName"
+              name="name"
+              maxlength="18"
+              autocomplete="nickname"
+              required
+            />
           </label>
           <label>
             部屋コード
-            <input id="roomCode" name="roomCode" maxlength="4" autocomplete="off" spellcheck="false" />
+            <input
+              id="roomCode"
+              name="roomCode"
+              maxlength="4"
+              autocomplete="off"
+              spellcheck="false"
+            />
           </label>
           <label>
             合言葉
-            <input id="roomPassword" name="password" type="password" maxlength="64" autocomplete="current-password" placeholder="鍵付き部屋だけ入力" />
+            <input
+              id="roomPassword"
+              name="password"
+              type="password"
+              maxlength="64"
+              autocomplete="current-password"
+              placeholder="鍵付き部屋だけ入力"
+            />
           </label>
           <div class="button-row">
-            <button class="primary-button" id="createRoomButton" type="button">部屋を作る</button>
+            <button class="primary-button" id="createRoomButton" type="button">
+              部屋を作る
+            </button>
             <button class="secondary-button" type="submit">参加する</button>
           </div>
           <p class="form-error" id="formError" role="alert"></p>
@@ -71,18 +118,56 @@
             <h2 id="phaseTitle">ロビー</h2>
           </div>
           <div class="header-actions">
-            <button class="secondary-button compact" id="commandOpenGameButton" type="button">⌘K</button>
-            <button class="secondary-button compact" id="soundToggleButton" type="button" aria-pressed="true">音 ON</button>
-            <button class="secondary-button compact" id="inviteButton" type="button">招待</button>
-            <button class="secondary-button compact" id="copyCodeButton" type="button">コードをコピー</button>
-            <button class="ghost-button compact" id="leaveButton" type="button">退室</button>
+            <button
+              class="secondary-button compact"
+              id="commandOpenGameButton"
+              type="button"
+            >
+              ⌘K
+            </button>
+            <button
+              class="secondary-button compact install-button hidden"
+              id="installGameButton"
+              type="button"
+            >
+              インストール
+            </button>
+            <button
+              class="secondary-button compact"
+              id="soundToggleButton"
+              type="button"
+              aria-pressed="true"
+            >
+              音 ON
+            </button>
+            <button
+              class="secondary-button compact"
+              id="inviteButton"
+              type="button"
+            >
+              招待
+            </button>
+            <button
+              class="secondary-button compact"
+              id="copyCodeButton"
+              type="button"
+            >
+              コードをコピー
+            </button>
+            <button class="ghost-button compact" id="leaveButton" type="button">
+              退室
+            </button>
           </div>
         </header>
 
         <div class="score-track" id="scoreTrack"></div>
 
         <div class="table-layout">
-          <aside class="players-panel" id="playersPanel" aria-label="プレイヤー"></aside>
+          <aside
+            class="players-panel"
+            id="playersPanel"
+            aria-label="プレイヤー"
+          ></aside>
 
           <section class="felt-table" aria-label="ゲームテーブル">
             <div class="round-banner" id="roundBanner"></div>
@@ -99,18 +184,43 @@
         </div>
 
         <section class="hand-panel" id="handPanel" aria-label="手札"></section>
-        <section class="action-panel" id="actionPanel" aria-label="操作"></section>
+        <section
+          class="action-panel"
+          id="actionPanel"
+          aria-label="操作"
+        ></section>
       </section>
     </main>
-    <div class="cinematic-layer" id="cinematicLayer" aria-live="assertive" aria-label="ゲーム演出"></div>
-    <div class="toast-stack" id="toastStack" aria-live="polite" aria-label="ゲーム通知"></div>
-    <dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">
+    <div
+      class="cinematic-layer"
+      id="cinematicLayer"
+      aria-live="assertive"
+      aria-label="ゲーム演出"
+    ></div>
+    <div
+      class="toast-stack"
+      id="toastStack"
+      aria-live="polite"
+      aria-label="ゲーム通知"
+    ></div>
+    <div class="network-status" id="networkStatus" aria-live="polite"></div>
+    <dialog
+      class="command-dialog"
+      id="commandDialog"
+      aria-labelledby="commandDialogTitle"
+    >
       <div class="command-dialog-head">
         <div>
           <p class="eyebrow">Quick actions</p>
           <h2 id="commandDialogTitle">コマンド</h2>
         </div>
-        <button class="ghost-button compact" id="commandCloseButton" type="button">閉じる</button>
+        <button
+          class="ghost-button compact"
+          id="commandCloseButton"
+          type="button"
+        >
+          閉じる
+        </button>
       </div>
       <div class="command-list" id="commandList"></div>
     </dialog>

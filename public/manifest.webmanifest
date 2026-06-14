@@ -1,0 +1,33 @@
+{
+  "name": "Secret Letter Table",
+  "short_name": "Secret Letter",
+  "description": "A realtime web card game inspired by short deduction letter games.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fffaf0",
+  "theme_color": "#1d614f",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/assets/card-back.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "部屋を作る",
+      "short_name": "作成",
+      "description": "Secret Letter Tableで新しい部屋を作ります。",
+      "url": "/?action=create"
+    },
+    {
+      "name": "部屋一覧",
+      "short_name": "一覧",
+      "description": "募集中の部屋一覧を開きます。",
+      "url": "/?action=rooms"
+    }
+  ]
+}
