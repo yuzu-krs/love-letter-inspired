@@ -54,6 +54,8 @@ let selectedCardUid = "";
 let isRulebookOpen = true;
 let soundEnabled = localStorage.getItem("secret-letter-sound") !== "off";
 let audioContext = null;
+let musicTimerId = 0;
+let musicStep = 0;
 let cinematicQueue = [];
 let isCinematicPlaying = false;
 let installPromptEvent = null;
@@ -62,6 +64,24 @@ let activeViewTransition = null;
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 );
+const BACKGROUND_MUSIC_PATTERN = [
+  { bass: 196, harmony: 392, lead: 523.25 },
+  { lead: 587.33 },
+  { lead: 659.25 },
+  { lead: 587.33 },
+  { bass: 174.61, harmony: 349.23, lead: 440 },
+  { lead: 523.25 },
+  { lead: 493.88 },
+  { lead: 440 },
+  { bass: 164.81, harmony: 329.63, lead: 392 },
+  { lead: 493.88 },
+  { lead: 523.25 },
+  { lead: 493.88 },
+  { bass: 146.83, harmony: 293.66, lead: 349.23 },
+  { lead: 392 },
+  { lead: 440 },
+  { lead: 493.88 },
+];
 
 updateSoundButton();
 updateNetworkStatus();
@@ -69,6 +89,7 @@ registerServiceWorker();
 
 document.addEventListener("pointerdown", () => {
   unlockAudio();
+  syncBackgroundMusic();
 });
 
 elements.cinematicLayer?.addEventListener("click", () => {
@@ -114,6 +135,9 @@ elements.soundToggleButton?.addEventListener("click", () => {
   if (soundEnabled) {
     unlockAudio();
     playSound("success");
+    syncBackgroundMusic();
+  } else {
+    stopBackgroundMusic();
   }
 });
 
@@ -143,6 +167,14 @@ window.addEventListener("online", () => {
 window.addEventListener("offline", () => {
   updateNetworkStatus();
   showToast("オフライン", "画面はキャッシュから確認できます。", "error");
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopBackgroundMusic();
+  } else {
+    syncBackgroundMusic();
+  }
 });
 
 document.addEventListener("keydown", (event) => {
@@ -177,6 +209,7 @@ elements.leaveButton.addEventListener("click", () => {
   socket.emit("leaveRoom", {}, () => {
     state = null;
     selectedCardUid = "";
+    stopBackgroundMusic();
     withViewTransition(() => {
       elements.joinPanel.classList.remove("hidden");
       elements.gamePanel.classList.add("hidden");
@@ -200,6 +233,7 @@ socket.on("stateUpdate", (nextState) => {
     render();
   });
   reactToStateChange(previousState, nextState);
+  syncBackgroundMusic();
 });
 
 socket.on("connect_error", () => {
@@ -1038,7 +1072,7 @@ function reactToStateChange(previousState, nextState) {
       nextState.phase === "roundOver" ||
       nextState.phase === "gameOver"
     ) {
-      playSound("winner");
+      playSound(nextState.phase === "gameOver" ? "gameWinner" : "winner");
       vibrate([12, 32, 12, 32, 18]);
       showToast(
         phaseLabels[nextState.phase],
@@ -1333,14 +1367,20 @@ function updateSoundButton() {
     return;
   }
 
-  elements.soundToggleButton.textContent = soundEnabled ? "音 ON" : "音 OFF";
+  elements.soundToggleButton.textContent = soundEnabled
+    ? "音/BGM ON"
+    : "音/BGM OFF";
   elements.soundToggleButton.setAttribute("aria-pressed", String(soundEnabled));
 }
 
 function unlockAudio() {
-  if (!soundEnabled || audioContext) {
-    if (audioContext?.state === "suspended") {
-      audioContext.resume();
+  if (!soundEnabled) {
+    return;
+  }
+
+  if (audioContext) {
+    if (audioContext.state === "suspended") {
+      audioContext.resume().then(syncBackgroundMusic).catch(() => {});
     }
     return;
   }
@@ -1351,6 +1391,63 @@ function unlockAudio() {
   }
 
   audioContext = new AudioContext();
+}
+
+function syncBackgroundMusic() {
+  if (!soundEnabled || !state?.roomCode || document.hidden) {
+    stopBackgroundMusic();
+    return;
+  }
+
+  startBackgroundMusic();
+}
+
+function startBackgroundMusic() {
+  if (musicTimerId) {
+    return;
+  }
+
+  unlockAudio();
+  if (!audioContext || audioContext.state === "suspended") {
+    return;
+  }
+
+  scheduleBackgroundMusicStep();
+  musicTimerId = window.setInterval(scheduleBackgroundMusicStep, 480);
+}
+
+function stopBackgroundMusic() {
+  if (!musicTimerId) {
+    return;
+  }
+
+  window.clearInterval(musicTimerId);
+  musicTimerId = 0;
+  musicStep = 0;
+}
+
+function scheduleBackgroundMusicStep() {
+  if (!soundEnabled || !state?.roomCode || !audioContext) {
+    stopBackgroundMusic();
+    return;
+  }
+
+  if (audioContext.state === "suspended") {
+    return;
+  }
+
+  const note =
+    BACKGROUND_MUSIC_PATTERN[musicStep % BACKGROUND_MUSIC_PATTERN.length];
+  if (note.bass) {
+    playTone(note.bass, 0.44, "sine", 0, 0.012);
+  }
+  if (note.harmony) {
+    playTone(note.harmony, 0.34, "sine", 0.02, 0.007);
+  }
+  if (note.lead) {
+    playTone(note.lead, 0.18, "triangle", 0.04, 0.014);
+  }
+  musicStep += 1;
 }
 
 function playSound(type) {
@@ -1412,10 +1509,22 @@ function playSound(type) {
       [90, 0.16, "triangle", 0.18],
     ],
     winner: [
-      [523, 0.08, "triangle", 0],
-      [659, 0.1, "triangle", 0.08],
-      [784, 0.12, "triangle", 0.18],
-      [1046, 0.16, "sine", 0.3],
+      [523, 0.16, "triangle", 0, 0.09],
+      [659, 0.16, "triangle", 0.02, 0.08],
+      [784, 0.18, "triangle", 0.16, 0.09],
+      [1046, 0.28, "sine", 0.34, 0.1],
+      [1318, 0.18, "sine", 0.62, 0.055],
+      [1568, 0.2, "triangle", 0.78, 0.045],
+    ],
+    gameWinner: [
+      [392, 0.18, "triangle", 0, 0.09],
+      [523, 0.2, "triangle", 0.1, 0.09],
+      [659, 0.24, "triangle", 0.22, 0.095],
+      [784, 0.28, "triangle", 0.38, 0.1],
+      [1046, 0.32, "sine", 0.58, 0.11],
+      [1318, 0.22, "sine", 0.9, 0.06],
+      [1568, 0.24, "triangle", 1.08, 0.05],
+      [2093, 0.28, "sine", 1.28, 0.045],
     ],
     success: [
       [540, 0.07, "sine", 0],
@@ -1428,13 +1537,13 @@ function playSound(type) {
   };
 
   (patterns[type] || patterns.tap).forEach(
-    ([frequency, duration, wave, delay]) => {
-      playTone(frequency, duration, wave, delay);
+    ([frequency, duration, wave, delay, volume]) => {
+      playTone(frequency, duration, wave, delay, volume);
     },
   );
 }
 
-function playTone(frequency, duration, wave, delay) {
+function playTone(frequency, duration, wave, delay = 0, volume = 0.08) {
   const startAt = audioContext.currentTime + delay;
   const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
@@ -1442,7 +1551,7 @@ function playTone(frequency, duration, wave, delay) {
   oscillator.type = wave;
   oscillator.frequency.setValueAtTime(frequency, startAt);
   gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.exponentialRampToValueAtTime(0.08, startAt + 0.01);
+  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
 
   oscillator.connect(gain);

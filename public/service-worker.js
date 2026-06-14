@@ -1,10 +1,13 @@
-const CACHE_NAME = "secret-letter-table-v4";
+const CACHE_NAME = "secret-letter-table-v6";
 const CORE_ASSETS = [
   "/",
   "/styles.css",
   "/client.js",
   "/manifest.webmanifest",
   "/assets/card-back.svg",
+  "/assets/favicon.svg",
+  "/assets/ogp.svg",
+  "/assets/ogp.png",
   "/assets/table-pattern.svg",
   "/assets/cards/01-scout.png",
   "/assets/cards/02-seer.png",

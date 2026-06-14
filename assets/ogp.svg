@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Secret Letter Table preview">
+  <defs>
+    <linearGradient id="table" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff8e7" />
+      <stop offset="0.48" stop-color="#e9c979" />
+      <stop offset="1" stop-color="#1d614f" />
+    </linearGradient>
+    <linearGradient id="cardA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff6dc" />
+      <stop offset="1" stop-color="#c94b63" />
+    </linearGradient>
+    <linearGradient id="cardB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff6dc" />
+      <stop offset="1" stop-color="#2b6f91" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#1a1820" flood-opacity="0.26" />
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#table)" />
+  <circle cx="1040" cy="110" r="210" fill="#fff7df" opacity="0.22" />
+  <circle cx="160" cy="520" r="240" fill="#1d614f" opacity="0.2" />
+  <g filter="url(#shadow)">
+    <rect x="742" y="118" width="205" height="305" rx="18" fill="url(#cardA)" stroke="#fff3c6" stroke-width="8" transform="rotate(-12 844.5 270.5)" />
+    <rect x="900" y="168" width="205" height="305" rx="18" fill="url(#cardB)" stroke="#fff3c6" stroke-width="8" transform="rotate(10 1002.5 320.5)" />
+    <rect x="816" y="232" width="205" height="305" rx="18" fill="#1d614f" stroke="#fff3c6" stroke-width="8" />
+    <path d="M846 274h145v48H846z" fill="#fff5d8" opacity="0.9" />
+    <path d="M846 354h145" stroke="#fff5d8" stroke-width="14" stroke-linecap="round" opacity="0.8" />
+    <path d="M846 390h118" stroke="#fff5d8" stroke-width="14" stroke-linecap="round" opacity="0.65" />
+    <circle cx="918" cy="461" r="34" fill="#c94b63" stroke="#8f213b" stroke-width="8" />
+  </g>
+  <g fill="#17251f">
+    <text x="92" y="184" font-family="Georgia, 'Times New Roman', serif" font-size="84" font-weight="700">Secret Letter</text>
+    <text x="92" y="270" font-family="Georgia, 'Times New Roman', serif" font-size="84" font-weight="700">Table</text>
+  </g>
+  <text x="96" y="342" fill="#1d614f" font-family="Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="3">REALTIME DEDUCTION CARD GAME</text>
+  <text x="96" y="404" fill="#322d25" font-family="Arial, sans-serif" font-size="30">Create a room, read the table, and win the letter.</text>
+  <rect x="96" y="462" width="292" height="64" rx="10" fill="#1d614f" />
+  <text x="128" y="504" fill="#fff8e7" font-family="Arial, sans-serif" font-size="28" font-weight="700">Play in browser</text>
+</svg>
