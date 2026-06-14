@@ -10,11 +10,6 @@ const elements = {
   roomPassword: document.querySelector("#roomPassword"),
   roomList: document.querySelector("#roomList"),
   formError: document.querySelector("#formError"),
-  commandOpenButton: document.querySelector("#commandOpenButton"),
-  commandOpenGameButton: document.querySelector("#commandOpenGameButton"),
-  commandCloseButton: document.querySelector("#commandCloseButton"),
-  commandDialog: document.querySelector("#commandDialog"),
-  commandList: document.querySelector("#commandList"),
   installButton: document.querySelector("#installButton"),
   installGameButton: document.querySelector("#installGameButton"),
   roomCodeLabel: document.querySelector("#roomCodeLabel"),
@@ -76,12 +71,6 @@ document.addEventListener("pointerdown", () => {
   unlockAudio();
 });
 
-document.addEventListener("click", (event) => {
-  if (event.target.closest("#commandOpenButton, #commandOpenGameButton")) {
-    openCommandDialog();
-  }
-});
-
 elements.cinematicLayer?.addEventListener("click", () => {
   dismissCinematic();
 });
@@ -128,18 +117,6 @@ elements.soundToggleButton?.addEventListener("click", () => {
   }
 });
 
-elements.commandOpenButton?.addEventListener("click", () => {
-  openCommandDialog();
-});
-
-elements.commandOpenGameButton?.addEventListener("click", () => {
-  openCommandDialog();
-});
-
-elements.commandCloseButton?.addEventListener("click", () => {
-  elements.commandDialog?.close();
-});
-
 [elements.installButton, elements.installGameButton].forEach((button) => {
   button?.addEventListener("click", () => {
     promptInstall();
@@ -172,12 +149,6 @@ document.addEventListener("keydown", (event) => {
   if (isCinematicPlaying && ["Escape", "Enter", " "].includes(event.key)) {
     event.preventDefault();
     dismissCinematic();
-    return;
-  }
-
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-    event.preventDefault();
-    openCommandDialog();
   }
 });
 
@@ -342,141 +313,6 @@ function withViewTransition(update) {
   } catch (error) {
     activeViewTransition = null;
     update();
-  }
-}
-
-function openCommandDialog() {
-  if (!elements.commandDialog || !elements.commandList) {
-    return;
-  }
-
-  renderCommandList();
-  if (!elements.commandDialog.open) {
-    elements.commandDialog.showModal();
-  }
-  elements.commandDialog.querySelector("[data-command]")?.focus();
-  playSound("tap");
-}
-
-function renderCommandList() {
-  const inGame = Boolean(state?.roomCode);
-  const selectedRoomCode = elements.roomCode.value.trim();
-  const selectedRoom = roomSummaries.find(
-    (room) => room.code === selectedRoomCode.toUpperCase(),
-  );
-
-  const commands = [
-    {
-      id: "create-room",
-      title: "部屋を作る",
-      detail: "名前と任意の合言葉で新しい卓を作成",
-      disabled: inGame,
-    },
-    {
-      id: "join-room",
-      title: "選択中の部屋に参加",
-      detail: selectedRoom
-        ? `${selectedRoom.code} / ${selectedRoom.locked ? "鍵付き" : "公開"}`
-        : "部屋一覧かコード入力から選択",
-      disabled: inGame || !selectedRoomCode,
-    },
-    {
-      id: "focus-room-code",
-      title: "部屋コード入力へ移動",
-      detail: "コードを手入力して参加",
-      disabled: inGame,
-    },
-    {
-      id: "toggle-sound",
-      title: soundEnabled ? "音をOFFにする" : "音をONにする",
-      detail: "効果音の切り替え",
-      disabled: false,
-    },
-    {
-      id: "install-app",
-      title: "アプリとしてインストール",
-      detail: installPromptEvent ? "ホーム画面やDockから起動" : "この環境では準備待ちです",
-      disabled: !installPromptEvent,
-    },
-    {
-      id: "refresh-cache",
-      title: "オフライン用キャッシュ更新",
-      detail: serviceWorkerRegistration ? "静的アセットを最新化" : "Service Worker準備中",
-      disabled: !serviceWorkerRegistration,
-    },
-    {
-      id: "invite-room",
-      title: "部屋を招待する",
-      detail: inGame ? `${state.roomCode} を共有` : "部屋に入ると使えます",
-      disabled: !inGame,
-    },
-    {
-      id: "copy-room",
-      title: "部屋コードをコピー",
-      detail: inGame ? state.roomCode : "部屋に入ると使えます",
-      disabled: !inGame,
-    },
-  ];
-
-  elements.commandList.innerHTML = commands
-    .map(
-      (command) => `
-        <button class="command-item" type="button" data-command="${command.id}" ${command.disabled ? "disabled" : ""}>
-          <span>${escapeHtml(command.title)}</span>
-          <small>${escapeHtml(command.detail)}</small>
-        </button>
-      `,
-    )
-    .join("");
-
-  elements.commandList.querySelectorAll("[data-command]").forEach((button) => {
-    button.addEventListener("click", () => runCommand(button.dataset.command));
-  });
-}
-
-function runCommand(command) {
-  elements.commandDialog?.close();
-  playSound("select");
-  vibrate(8);
-
-  if (command === "create-room") {
-    elements.createRoomButton.click();
-    return;
-  }
-
-  if (command === "join-room") {
-    elements.joinForm.requestSubmit();
-    return;
-  }
-
-  if (command === "focus-room-code") {
-    elements.roomCode.focus();
-    elements.roomCode.select();
-    return;
-  }
-
-  if (command === "toggle-sound") {
-    elements.soundToggleButton?.click();
-    return;
-  }
-
-  if (command === "install-app") {
-    promptInstall();
-    return;
-  }
-
-  if (command === "refresh-cache") {
-    refreshOfflineCache();
-    return;
-  }
-
-  if (command === "invite-room") {
-    shareRoom();
-    return;
-  }
-
-  if (command === "copy-room") {
-    elements.copyCodeButton.click();
   }
 }
 

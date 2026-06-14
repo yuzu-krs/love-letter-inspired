@@ -18,13 +18,6 @@
             <h1 id="gameTitle">Secret Letter Table</h1>
           </div>
           <button
-            class="secondary-button compact command-open-button"
-            id="commandOpenButton"
-            type="button"
-          >
-            ⌘K
-          </button>
-          <button
             class="secondary-button compact install-button hidden"
             id="installButton"
             type="button"
@@ -119,13 +112,6 @@
           </div>
           <div class="header-actions">
             <button
-              class="secondary-button compact"
-              id="commandOpenGameButton"
-              type="button"
-            >
-              ⌘K
-            </button>
-            <button
               class="secondary-button compact install-button hidden"
               id="installGameButton"
               type="button"
@@ -204,27 +190,6 @@
       aria-label="ゲーム通知"
     ></div>
     <div class="network-status" id="networkStatus" aria-live="polite"></div>
-    <dialog
-      class="command-dialog"
-      id="commandDialog"
-      aria-labelledby="commandDialogTitle"
-    >
-      <div class="command-dialog-head">
-        <div>
-          <p class="eyebrow">Quick actions</p>
-          <h2 id="commandDialogTitle">コマンド</h2>
-        </div>
-        <button
-          class="ghost-button compact"
-          id="commandCloseButton"
-          type="button"
-        >
-          閉じる
-        </button>
-      </div>
-      <div class="command-list" id="commandList"></div>
-    </dialog>
-
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
   </body>
