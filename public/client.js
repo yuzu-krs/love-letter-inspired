@@ -752,6 +752,10 @@ function renderTable() {
     elements.roundBanner.textContent = `${state.players.length} / 4 人`;
     statusTitle = "参加待ち";
     statusText = "2人以上で開始できます。";
+  } else if (state.pendingAdvance) {
+    elements.roundBanner.textContent = `Round ${state.round}`;
+    statusTitle = escapeHtml(state.lastPlayed?.playerName || "効果解決中");
+    statusText = "効果を解決中";
   } else if (state.phase === "playing") {
     elements.roundBanner.textContent = `Round ${state.round}`;
     statusTitle = escapeHtml(currentPlayer?.name || "");
@@ -1000,8 +1004,10 @@ function renderActions() {
         },
         (reply) => {
           if (!reply?.ok) {
+            const message = reply?.error || "カードを出せませんでした。";
             playSound("error");
-            setActionError(reply?.error || "カードを出せませんでした。");
+            setActionError(message);
+            showToast("カードを出せません", message, "error", 5600);
           } else {
             selectedCardUid = "";
           }
@@ -1185,6 +1191,7 @@ function isMyTurn() {
   const me = state.players.find((player) => player.id === state.you?.id);
   return (
     state.phase === "playing" &&
+    !state.pendingAdvance &&
     state.currentPlayerId === state.you?.id &&
     !me?.eliminated
   );
@@ -1197,6 +1204,9 @@ function getHandStatusText() {
   if (isMyTurn()) {
     return "あなたの番";
   }
+  if (state.pendingAdvance) {
+    return "効果解決中";
+  }
   return "待機中";
 }
 
@@ -1204,6 +1214,9 @@ function getActionWaitText() {
   const me = state.players.find((player) => player.id === state.you?.id);
   if (me?.eliminated) {
     return "このラウンドは脱落しています。";
+  }
+  if (state.pendingAdvance) {
+    return "効果を解決中です。次の手札が配られるまで少し待ってください。";
   }
   const current = state.players.find(
     (player) => player.id === state.currentPlayerId,
@@ -1458,7 +1471,7 @@ function getWinnerText(nextState) {
   return names ? `${names} が勝利しました。` : "結果を確認してください。";
 }
 
-function showToast(title, message, type = "") {
+function showToast(title, message, type = "", duration = 2600) {
   if (!elements.toastStack) {
     return;
   }
@@ -1474,7 +1487,7 @@ function showToast(title, message, type = "") {
   window.setTimeout(() => {
     toast.classList.add("leaving");
     window.setTimeout(() => toast.remove(), 260);
-  }, 2600);
+  }, duration);
 }
 
 function showDuelCinematic(effect) {

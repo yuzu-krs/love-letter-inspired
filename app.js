@@ -10,6 +10,7 @@ const MAX_PLAYERS = 4;
 const MIN_PLAYERS = 2;
 const MAX_PASSWORD_LENGTH = 64;
 const TURN_TIME_OPTIONS = new Set([0, 30, 60, 120, 180]);
+const EFFECT_RESOLUTION_DELAY_MS = 7200;
 
 const CARD_TYPES = [
   {
@@ -124,7 +125,7 @@ const GAME_RULES = {
   winning: [
     "最後まで残ったプレイヤーがラウンド勝者です。",
     "山札が尽きたら、残った手札の数字が高い人が勝者です。同値なら捨て札合計で比べます。",
-    "2人戦は4点、3〜4人戦は3点でゲーム勝利です。",
+    "4点でゲーム勝利です。",
   ],
   notes: [
     "封蝋の護りは次の自分の番が来るまで相手の効果対象になりません。",
@@ -134,6 +135,7 @@ const GAME_RULES = {
 };
 const rooms = new Map();
 const roomTimers = new Map();
+const roomAdvanceTimers = new Map();
 const TURN_TIMER_GRACE_MS = 120;
 
 let expressAuth = null;
@@ -526,6 +528,7 @@ io.on("connection", (socket) => {
 
     if (room.players.every((entry) => !entry.connected)) {
       clearRoomTimer(room.code);
+      clearRoomAdvanceTimer(room.code);
       rooms.delete(room.code);
       broadcastRoomList();
       return;
@@ -543,7 +546,7 @@ function createRoom(code, hostId, hostName, password, user = null) {
     createdAt: Date.now(),
     phase: "lobby",
     round: 0,
-    targetScore: 3,
+    targetScore: 4,
     password: password ? hashPassword(password) : null,
     players: [createPlayer(hostId, hostName, user)],
     deck: [],
@@ -552,6 +555,7 @@ function createRoom(code, hostId, hostName, password, user = null) {
     roundWinnerIds: [],
     turnTimeLimitSeconds: 0,
     turnDeadlineAt: 0,
+    pendingAdvance: false,
     lastPlayed: null,
     lastEffect: null,
     log: [`${hostName} が部屋を作りました。`],
@@ -578,19 +582,21 @@ function createPlayer(id, name, user = null) {
 
 function startRound(room) {
   clearRoomTimer(room.code);
+  clearRoomAdvanceTimer(room.code);
   room.players = room.players.filter((player) => player.connected);
   assignHostIfNeeded(room);
   room.phase = "playing";
   room.round += 1;
   room.roundWinnerIds = [];
   room.turnDeadlineAt = 0;
+  room.pendingAdvance = false;
   room.lastPlayed = null;
   room.lastEffect = null;
   room.gameStatsRecorded = false;
   room.insights.clear();
   room.deck = shuffle(buildDeck());
   room.burnCard = draw(room.deck);
-  room.targetScore = room.players.length === 2 ? 4 : 3;
+  room.targetScore = 4;
 
   room.players.forEach((player) => {
     player.hand = [draw(room.deck)];
@@ -625,6 +631,10 @@ function beginTurn(room) {
 function playCard(room, playerId, cardUid, targetId, guessValue) {
   if (room.phase !== "playing") {
     return { ok: false, error: "今はカードを出せません。" };
+  }
+
+  if (room.pendingAdvance) {
+    return { ok: false, error: "効果を解決中です。少し待ってください。" };
   }
 
   const player = room.players.find((entry) => entry.id === playerId);
@@ -682,7 +692,7 @@ function playCard(room, playerId, cardUid, targetId, guessValue) {
     target.protectedTargets,
   );
   queueCardPlayedStat(player);
-  resolveRoundOrAdvance(room);
+  resolveRoundOrScheduleAdvance(room);
   return { ok: true };
 }
 
@@ -854,6 +864,9 @@ function resolveRoundOrAdvance(room) {
     return;
   }
 
+  room.pendingAdvance = false;
+  clearRoomAdvanceTimer(room.code);
+
   const activePlayers = getActivePlayers(room);
   if (activePlayers.length <= 1) {
     endRound(room, activePlayers, "最後まで残りました。");
@@ -869,9 +882,43 @@ function resolveRoundOrAdvance(room) {
   advanceTurn(room);
 }
 
+function resolveRoundOrScheduleAdvance(room) {
+  if (room.phase !== "playing") {
+    return;
+  }
+
+  const activePlayers = getActivePlayers(room);
+  if (activePlayers.length <= 1) {
+    endRound(room, activePlayers, "最後まで残りました。");
+    return;
+  }
+
+  if (room.deck.length === 0) {
+    const winners = chooseWinnersByHand(activePlayers);
+    endRound(room, winners, "山札が尽きたため、残った手札で勝者を決めました。");
+    return;
+  }
+
+  room.pendingAdvance = true;
+  clearRoomTimer(room.code);
+  clearRoomAdvanceTimer(room.code);
+  const timerId = setTimeout(() => {
+    const latestRoom = rooms.get(room.code);
+    if (!latestRoom || latestRoom.phase !== "playing" || !latestRoom.pendingAdvance) {
+      return;
+    }
+    resolveRoundOrAdvance(latestRoom);
+    broadcastRoom(latestRoom);
+    broadcastRoomList();
+  }, EFFECT_RESOLUTION_DELAY_MS);
+  roomAdvanceTimers.set(room.code, timerId);
+}
+
 function endRound(room, winners, reason) {
   clearRoomTimer(room.code);
+  clearRoomAdvanceTimer(room.code);
   room.turnDeadlineAt = 0;
+  room.pendingAdvance = false;
   const finalWinners =
     winners.length > 0 ? winners : chooseWinnersByHand(getActivePlayers(room));
   finalWinners.forEach((winner) => {
@@ -1138,6 +1185,7 @@ function serializeRoom(room, viewerId) {
     round: room.round,
     turnTimeLimitSeconds: room.turnTimeLimitSeconds || 0,
     turnDeadlineAt: room.turnDeadlineAt || 0,
+    pendingAdvance: room.pendingAdvance,
     targetScore: room.targetScore,
     hostId: room.hostId,
     currentPlayerId: currentPlayer?.id || null,
@@ -1193,6 +1241,7 @@ function removePlayerFromRoom(room, playerId, reason) {
 
   if (room.players.length === 0) {
     clearRoomTimer(room.code);
+    clearRoomAdvanceTimer(room.code);
     rooms.delete(room.code);
   }
 }
@@ -1223,11 +1272,14 @@ function assignHostIfNeeded(room) {
 
 function resetRoomToLobby(room, message) {
   clearRoomTimer(room.code);
+  clearRoomAdvanceTimer(room.code);
   room.phase = "lobby";
+  room.targetScore = 4;
   room.deck = [];
   room.burnCard = null;
   room.currentTurnIndex = 0;
   room.turnDeadlineAt = 0;
+  room.pendingAdvance = false;
   room.roundWinnerIds = [];
   room.lastPlayed = null;
   room.lastEffect = null;
@@ -1363,6 +1415,14 @@ function clearRoomTimer(roomCode) {
   if (timerId) {
     clearTimeout(timerId);
     roomTimers.delete(roomCode);
+  }
+}
+
+function clearRoomAdvanceTimer(roomCode) {
+  const timerId = roomAdvanceTimers.get(roomCode);
+  if (timerId) {
+    clearTimeout(timerId);
+    roomAdvanceTimers.delete(roomCode);
   }
 }
 
