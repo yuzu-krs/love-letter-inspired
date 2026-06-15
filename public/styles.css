@@ -38,16 +38,16 @@ body {
   background:
     linear-gradient(
       135deg,
-      rgba(255, 250, 240, 0.9),
-      rgba(255, 244, 216, 0.84)
+      rgba(255, 250, 240, 0.78),
+      rgba(255, 244, 216, 0.66)
     ),
     linear-gradient(
       90deg,
       rgba(29, 97, 79, 0.18),
-      rgba(201, 75, 99, 0.12),
-      rgba(68, 118, 181, 0.12)
+      rgba(201, 75, 99, 0.08),
+      rgba(68, 118, 181, 0.1)
     ),
-    url("/assets/table-pattern.svg");
+    url("/assets/cards/ゲーム背景.png") center / cover fixed;
 }
 
 button,
@@ -59,6 +59,14 @@ select {
 button {
   border: 0;
   cursor: pointer;
+}
+
+a.primary-button,
+a.secondary-button,
+a.ghost-button {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 button:disabled {
@@ -143,6 +151,66 @@ h2 {
 .join-form {
   display: grid;
   gap: 16px;
+}
+.account-panel {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.account-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.account-head h2 {
+  font-size: 1.02rem;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.stat-grid div {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 250, 240, 0.75);
+}
+.stat-grid strong {
+  font-size: 1.2rem;
+}
+.stat-grid span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.leaderboard h3 {
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+.leaderboard-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+.leaderboard-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+.leaderboard-list span {
+  color: var(--muted);
+  font-weight: 700;
 }
 
 @container (min-width: 620px) {
@@ -288,6 +356,43 @@ select:focus {
   min-height: 36px;
   padding: 0 12px;
   font-size: 0.88rem;
+}
+
+.compact-control {
+  min-height: 36px;
+}
+
+.audio-control {
+  min-width: 230px;
+  display: grid;
+  grid-template-columns: auto minmax(88px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 7px 5px 10px;
+  color: var(--muted);
+  background: rgba(255, 244, 216, 0.88);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.audio-control input {
+  min-height: 14px;
+  padding: 0;
+  accent-color: var(--felt);
+}
+
+.audio-toggle {
+  min-width: 46px;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 0.72rem;
+}
+
+.turn-timer {
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .install-button {
@@ -1331,12 +1436,36 @@ select:focus {
 }
 
 @media (max-width: 520px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  .app-shell {
+    width: 100%;
+    min-height: 100svh;
+    padding: 0;
+    align-items: stretch;
+  }
+
   .join-panel {
-    padding: 20px;
+    min-height: 100svh;
+    border-width: 0;
+    border-radius: 0;
+    padding: 18px 14px 22px;
+    box-shadow: none;
   }
 
   .brand-row {
     align-items: flex-start;
+    gap: 12px;
+  }
+
+  h1 {
+    font-size: 2.25rem;
+  }
+
+  .join-form {
+    gap: 12px;
   }
 
   .table-teaser {
@@ -1367,13 +1496,130 @@ select:focus {
     height: 72px;
   }
 
+  .game-panel {
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .table-header,
+  .score-track,
+  .hand-panel,
+  .action-panel {
+    border-radius: 8px;
+  }
+
+  .table-header {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    gap: 10px;
+    padding: 12px;
+  }
+
   .button-row,
-  .header-actions,
   .hand-cards,
   .room-directory-head,
   .lobby-action-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .header-actions > button:not(.audio-toggle) {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 8px;
+  }
+
+  .audio-control {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 52px minmax(0, 1fr) 48px;
+  }
+
+  .audio-toggle {
+    width: 48px;
+  }
+
+  .score-track {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 8px;
+  }
+
+  .score-pill {
+    flex: 0 0 auto;
+    min-width: max-content;
+  }
+
+  .table-layout {
+    gap: 10px;
+  }
+
+  .players-panel {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 2px;
+  }
+
+  .player-card {
+    flex: 0 0 78vw;
+    min-height: 94px;
+    padding: 10px;
+  }
+
+  .felt-table {
+    min-height: auto;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .deck-stack {
+    width: 84px;
+    height: 116px;
+  }
+
+  .turn-card {
+    min-height: 150px;
+    padding: 12px;
+  }
+
+  .played-preview {
+    grid-template-columns: 58px minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .played-preview img {
+    width: 58px;
+  }
+
+  .played-placeholder {
+    min-height: 78px;
+  }
+
+  .log-box {
+    max-height: 120px;
+    font-size: 0.82rem;
+  }
+
+  .hand-panel,
+  .action-panel {
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .hand-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .room-card {
@@ -1398,9 +1644,21 @@ select:focus {
 
   .primary-button,
   .secondary-button,
-  .ghost-button,
+  .ghost-button {
+    width: 100%;
+  }
+
   .game-card {
     width: 100%;
+    padding: 6px;
+  }
+
+  .card-meta strong {
+    font-size: 0.82rem;
+  }
+
+  .card-meta small {
+    font-size: 0.75rem;
   }
 
   .table-center {
@@ -1437,6 +1695,106 @@ select:focus {
 
   .insight-card img {
     width: min(100%, 150px);
+  }
+
+  .cinematic-layer {
+    padding: 10px;
+  }
+
+  .cinematic-stage {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .cinematic-card-use,
+  .cinematic-duel,
+  .cinematic-exchange,
+  .cinematic-round-start,
+  .cinematic-peek,
+  .cinematic-discard,
+  .cinematic-guess,
+  .cinematic-guard,
+  .cinematic-elimination,
+  .cinematic-winner {
+    width: 100%;
+    max-height: calc(100svh - 76px);
+    overflow: auto;
+  }
+
+  .cinematic-card-use,
+  .cinematic-peek,
+  .cinematic-discard,
+  .cinematic-guess,
+  .cinematic-guard,
+  .cinematic-elimination {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .cinematic-duel,
+  .cinematic-exchange {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .cinematic-copy strong,
+  .cinematic-elimination strong,
+  .cinematic-winner strong {
+    font-size: 1.8rem;
+  }
+
+  .cinematic-copy p,
+  .cinematic-elimination p,
+  .cinematic-winner p {
+    font-size: 0.88rem;
+  }
+
+  .cinematic-dismiss {
+    width: min(100%, 320px);
+  }
+
+  .cinematic-round-start {
+    min-height: min(58svh, 420px);
+  }
+
+  .cinematic-round-start img {
+    min-height: min(58svh, 420px);
+  }
+
+  .toast-stack {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+  }
+
+  .network-status {
+    left: 10px;
+    bottom: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .header-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .audio-control {
+    grid-template-columns: 46px minmax(0, 1fr) 46px;
+  }
+
+  .hand-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .player-card {
+    flex-basis: 86vw;
+  }
+
+  .cinematic-copy strong,
+  .cinematic-elimination strong,
+  .cinematic-winner strong {
+    font-size: 1.5rem;
   }
 }
 
@@ -1583,9 +1941,11 @@ select:focus {
 .cinematic-duel,
 .cinematic-peek,
 .cinematic-discard,
+.cinematic-guess,
 .cinematic-guard,
 .cinematic-elimination,
-.cinematic-winner {
+.cinematic-winner,
+.cinematic-round-start {
   width: min(760px, calc(100vw - 36px));
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
@@ -1614,7 +1974,11 @@ select:focus {
   padding: 28px;
   border-color: rgba(183, 120, 34, 0.9);
   background:
-    radial-gradient(circle at center, rgba(255, 244, 216, 0.2), transparent 48%),
+    radial-gradient(
+      circle at center,
+      rgba(255, 244, 216, 0.2),
+      transparent 48%
+    ),
     linear-gradient(135deg, rgba(183, 120, 34, 0.3), rgba(23, 22, 26, 0.96));
   animation: duelSceneIn 0.24s ease-out;
 }
@@ -1627,11 +1991,11 @@ select:focus {
 }
 
 .duel-card.left {
-  animation: duelLeftStrike 0.9s ease-in-out infinite alternate;
+  animation: duelLeftStrike 1.35s ease-in-out infinite alternate;
 }
 
 .duel-card.right {
-  animation: duelRightStrike 0.9s ease-in-out infinite alternate;
+  animation: duelRightStrike 1.35s ease-in-out infinite alternate;
 }
 
 .duel-card span {
@@ -1708,13 +2072,20 @@ select:focus {
 .cinematic-exchange {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(130px, 180px) minmax(120px, 170px) minmax(130px, 180px);
+  grid-template-columns: minmax(130px, 180px) minmax(120px, 170px) minmax(
+      130px,
+      180px
+    );
   gap: 22px;
   align-items: center;
   padding: 26px;
   border-color: rgba(42, 130, 121, 0.76);
   background:
-    radial-gradient(circle at 50% 46%, rgba(255, 244, 216, 0.16), transparent 52%),
+    radial-gradient(
+      circle at 50% 46%,
+      rgba(255, 244, 216, 0.16),
+      transparent 52%
+    ),
     linear-gradient(135deg, rgba(42, 130, 121, 0.32), rgba(23, 22, 26, 0.95));
   animation: exchangeSceneIn 0.34s ease-out;
 }
@@ -1730,17 +2101,24 @@ select:focus {
 .exchange-player img {
   width: min(100%, 154px);
   aspect-ratio: 2 / 3;
+  border: 3px solid var(--card-accent, rgba(255, 255, 255, 0.3));
   border-radius: 8px;
   object-fit: cover;
   box-shadow: 0 24px 42px rgba(0, 0, 0, 0.36);
 }
 
+.exchange-player strong {
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
 .exchange-player.left img {
-  animation: exchangeLeftSwap 1.55s cubic-bezier(0.2, 0.9, 0.2, 1) infinite alternate;
+  animation: exchangeLeftSwap 1.35s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
 }
 
 .exchange-player.right img {
-  animation: exchangeRightSwap 1.55s cubic-bezier(0.2, 0.9, 0.2, 1) infinite alternate;
+  animation: exchangeRightSwap 1.35s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
 }
 
 .exchange-center {
@@ -1768,8 +2146,41 @@ select:focus {
   text-shadow: 0 8px 18px rgba(0, 0, 0, 0.38);
 }
 
+.cinematic-round-start {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  width: min(820px, calc(100vw - 36px));
+  min-height: min(460px, calc(100vh - 140px));
+  padding: 0;
+  border-color: rgba(255, 244, 216, 0.6);
+  background: rgba(23, 22, 26, 0.96);
+  animation: roundStartIn 0.38s cubic-bezier(0.2, 0.9, 0.2, 1.1);
+}
+
+.cinematic-round-start img {
+  width: 100%;
+  height: 100%;
+  min-height: min(460px, calc(100vh - 140px));
+  object-fit: cover;
+}
+
+.round-start-copy {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  padding: 8px 13px;
+  color: #fff4d8;
+  background: rgba(23, 22, 26, 0.66);
+  font-weight: 900;
+}
+
 .cinematic-peek,
-.cinematic-discard {
+.cinematic-discard,
+.cinematic-guess {
   position: relative;
   display: grid;
   grid-template-columns: minmax(170px, 230px) minmax(0, 1fr);
@@ -1792,8 +2203,23 @@ select:focus {
     rgba(23, 22, 26, 0.94);
 }
 
+.cinematic-guess.hit {
+  border-color: rgba(55, 128, 95, 0.82);
+  background:
+    linear-gradient(135deg, rgba(55, 128, 95, 0.32), rgba(23, 22, 26, 0.94)),
+    rgba(23, 22, 26, 0.94);
+}
+
+.cinematic-guess.miss {
+  border-color: rgba(183, 120, 34, 0.82);
+  background:
+    linear-gradient(135deg, rgba(183, 120, 34, 0.3), rgba(23, 22, 26, 0.94)),
+    rgba(23, 22, 26, 0.94);
+}
+
 .cinematic-peek img,
-.cinematic-discard img {
+.cinematic-discard img,
+.cinematic-guess img {
   width: 100%;
   aspect-ratio: 2 / 3;
   border-radius: 8px;
@@ -1809,7 +2235,11 @@ select:focus {
   padding: 28px;
   border-color: rgba(55, 128, 95, 0.78);
   background:
-    radial-gradient(circle at 76px 76px, rgba(255, 244, 216, 0.2), transparent 44%),
+    radial-gradient(
+      circle at 76px 76px,
+      rgba(255, 244, 216, 0.2),
+      transparent 44%
+    ),
     linear-gradient(135deg, rgba(55, 128, 95, 0.34), rgba(23, 22, 26, 0.94));
   animation: guardIn 0.34s ease-out;
 }
@@ -1965,8 +2395,10 @@ select:focus {
   .cinematic-card-use,
   .cinematic-duel,
   .cinematic-exchange,
+  .cinematic-round-start,
   .cinematic-peek,
   .cinematic-discard,
+  .cinematic-guess,
   .cinematic-guard,
   .cinematic-elimination {
     grid-template-columns: 1fr;
@@ -1975,7 +2407,8 @@ select:focus {
 
   .cinematic-card-use img,
   .cinematic-peek img,
-  .cinematic-discard img {
+  .cinematic-discard img,
+  .cinematic-guess img {
     width: min(100%, 220px);
     justify-self: center;
   }
@@ -2226,6 +2659,18 @@ select:focus {
   from {
     opacity: 0;
     transform: translateY(20px) scale(0.88);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes roundStartIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
   }
 
   to {

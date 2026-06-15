@@ -3,11 +3,13 @@ const crypto = require("crypto");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const { prisma } = require("./lib/prisma");
 
 const PORT = process.env.PORT || 3000;
 const MAX_PLAYERS = 4;
 const MIN_PLAYERS = 2;
 const MAX_PASSWORD_LENGTH = 64;
+const TURN_TIME_OPTIONS = new Set([0, 30, 60, 120, 180]);
 
 const CARD_TYPES = [
   {
@@ -131,12 +133,20 @@ const GAME_RULES = {
   ],
 };
 const rooms = new Map();
+const roomTimers = new Map();
+const TURN_TIMER_GRACE_MS = 120;
+
+let expressAuth = null;
+let getAuthSession = null;
+let googleProviderFactory = null;
+let prismaAdapterFactory = null;
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 app.disable("x-powered-by");
+app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
@@ -150,6 +160,73 @@ app.use((req, res, next) => {
     "camera=(), microphone=(), geolocation=()",
   );
   next();
+});
+
+app.set("trust proxy", true);
+
+app.get("/api/me", async (req, res) => {
+  const session = await safelyGetSession(req);
+  if (!session?.user) {
+    res.json({
+      authenticated: false,
+      user: null,
+      authEnabled: Boolean(authConfig),
+    });
+    return;
+  }
+
+  const stats = await prisma.playerStats.findUnique({
+    where: { userId: session.user.id },
+  });
+
+  res.json({
+    authenticated: true,
+    authEnabled: Boolean(authConfig),
+    user: {
+      id: session.user.id,
+      name: session.user.name || "プレイヤー",
+      email: session.user.email || "",
+      image: session.user.image || "",
+    },
+    stats: stats || null,
+  });
+});
+
+app.get("/api/me/stats", async (req, res) => {
+  const session = await safelyGetSession(req);
+  if (!session?.user) {
+    res.status(401).json({ ok: false, error: "未ログインです。" });
+    return;
+  }
+
+  const stats = await prisma.playerStats.findUnique({
+    where: { userId: session.user.id },
+  });
+
+  const recentMatches = await prisma.matchResult.findMany({
+    take: 10,
+    orderBy: { createdAt: "desc" },
+  });
+
+  res.json({ ok: true, stats, recentMatches });
+});
+
+app.get("/api/leaderboard", async (_, res) => {
+  const leaderboard = await prisma.playerStats.findMany({
+    take: 20,
+    orderBy: [{ totalGamesWon: "desc" }, { totalRoundsWon: "desc" }],
+    select: {
+      userId: true,
+      displayName: true,
+      totalGamesPlayed: true,
+      totalGamesWon: true,
+      totalRoundsWon: true,
+      totalCardsPlayed: true,
+      updatedAt: true,
+    },
+  });
+
+  res.json({ ok: true, leaderboard });
 });
 
 app.use("/assets", express.static(path.join(__dirname, "assets")));
@@ -178,8 +255,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const { name, password } = payload || {};
-    const playerName = cleanName(name);
+    const { name, password, user } = payload || {};
+    const authUser = normalizeClientUser(user);
+    const playerName = cleanName(authUser?.name || name);
     const roomPassword = cleanPassword(password);
     if (!playerName) {
       reply?.({ ok: false, error: "名前を入力してください。" });
@@ -187,11 +265,19 @@ io.on("connection", (socket) => {
     }
 
     const roomCode = createRoomCode();
-    const room = createRoom(roomCode, socket.id, playerName, roomPassword);
+    const room = createRoom(
+      roomCode,
+      socket.id,
+      playerName,
+      roomPassword,
+      authUser,
+    );
     rooms.set(roomCode, room);
     socket.join(roomCode);
     socket.data.roomCode = roomCode;
     socket.data.playerId = socket.id;
+
+    ensurePlayerStats(authUser?.id, playerName);
 
     reply?.({ ok: true, roomCode, playerId: socket.id });
     broadcastRoom(room);
@@ -209,9 +295,10 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const { roomCode, name, password } = payload || {};
+    const { roomCode, name, password, user } = payload || {};
     const normalizedCode = normalizeRoomCode(roomCode);
-    const playerName = cleanName(name);
+    const authUser = normalizeClientUser(user);
+    const playerName = cleanName(authUser?.name || name);
     const roomPassword = cleanPassword(password);
     const room = rooms.get(normalizedCode);
 
@@ -245,8 +332,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    room.players.push(createPlayer(socket.id, playerName));
+    room.players.push(createPlayer(socket.id, playerName, authUser));
     room.log.push(`${playerName} が参加しました。`);
+    ensurePlayerStats(authUser?.id, playerName);
 
     socket.join(normalizedCode);
     socket.data.roomCode = normalizedCode;
@@ -280,7 +368,52 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const timerOption = normalizeTurnTime(payload?.turnTimeLimitSeconds);
+    if (timerOption !== null) {
+      room.turnTimeLimitSeconds = timerOption;
+    }
+
     startRound(room);
+    reply?.({ ok: true });
+    broadcastRoom(room);
+    broadcastRoomList();
+  });
+
+  socket.on("updateRoomSettings", (payload = {}, reply) => {
+    if (isRateLimited(socket, "updateRoomSettings", 300)) {
+      reply?.({ ok: false, error: "少し待ってから操作してください。" });
+      return;
+    }
+
+    const room = getSocketRoom(socket, payload?.roomCode);
+    if (!room) {
+      reply?.({ ok: false, error: "部屋が見つかりません。" });
+      return;
+    }
+
+    if (room.hostId !== socket.id) {
+      reply?.({ ok: false, error: "部屋主だけが設定できます。" });
+      return;
+    }
+
+    if (room.phase !== "lobby") {
+      reply?.({ ok: false, error: "対戦中は変更できません。" });
+      return;
+    }
+
+    const timerOption = normalizeTurnTime(payload?.turnTimeLimitSeconds);
+    if (timerOption === null) {
+      reply?.({ ok: false, error: "持ち時間の設定値が不正です。" });
+      return;
+    }
+
+    room.turnTimeLimitSeconds = timerOption;
+    room.log.push(
+      timerOption > 0
+        ? `手番の持ち時間を ${timerOption} 秒に設定しました。`
+        : "手番の持ち時間をなしに設定しました。",
+    );
+
     reply?.({ ok: true });
     broadcastRoom(room);
     broadcastRoomList();
@@ -392,6 +525,7 @@ io.on("connection", (socket) => {
     }
 
     if (room.players.every((entry) => !entry.connected)) {
+      clearRoomTimer(room.code);
       rooms.delete(room.code);
       broadcastRoomList();
       return;
@@ -402,7 +536,7 @@ io.on("connection", (socket) => {
   });
 });
 
-function createRoom(code, hostId, hostName, password) {
+function createRoom(code, hostId, hostName, password, user = null) {
   return {
     code,
     hostId,
@@ -411,21 +545,27 @@ function createRoom(code, hostId, hostName, password) {
     round: 0,
     targetScore: 3,
     password: password ? hashPassword(password) : null,
-    players: [createPlayer(hostId, hostName)],
+    players: [createPlayer(hostId, hostName, user)],
     deck: [],
     burnCard: null,
     currentTurnIndex: 0,
     roundWinnerIds: [],
+    turnTimeLimitSeconds: 0,
+    turnDeadlineAt: 0,
     lastPlayed: null,
     lastEffect: null,
     log: [`${hostName} が部屋を作りました。`],
     insights: new Map(),
+    playersByUser: new Map(),
+    gameStatsRecorded: false,
+    lastRoundStatKey: "",
   };
 }
 
-function createPlayer(id, name) {
+function createPlayer(id, name, user = null) {
   return {
     id,
+    userId: user?.id || null,
     name,
     score: 0,
     hand: [],
@@ -437,13 +577,16 @@ function createPlayer(id, name) {
 }
 
 function startRound(room) {
+  clearRoomTimer(room.code);
   room.players = room.players.filter((player) => player.connected);
   assignHostIfNeeded(room);
   room.phase = "playing";
   room.round += 1;
   room.roundWinnerIds = [];
+  room.turnDeadlineAt = 0;
   room.lastPlayed = null;
   room.lastEffect = null;
+  room.gameStatsRecorded = false;
   room.insights.clear();
   room.deck = shuffle(buildDeck());
   room.burnCard = draw(room.deck);
@@ -476,6 +619,7 @@ function beginTurn(room) {
   }
 
   room.log.push(`${player.name} の番です。`);
+  scheduleRoomTimer(room);
 }
 
 function playCard(room, playerId, cardUid, targetId, guessValue) {
@@ -537,6 +681,7 @@ function playCard(room, playerId, cardUid, targetId, guessValue) {
     guessValue,
     target.protectedTargets,
   );
+  queueCardPlayedStat(player);
   resolveRoundOrAdvance(room);
   return { ok: true };
 }
@@ -559,10 +704,22 @@ function applyCardEffect(
       room.log.push(
         `${player.name} は ${target.name} の手札を「${guessedType.name}」と宣言しました。`,
       );
-      if (target.hand[0].value === guessValue) {
+      const isHit = target.hand[0].value === guessValue;
+      room.lastEffect = createEffectEvent("guess", {
+        playerId: player.id,
+        playerName: player.name,
+        targetId: target.id,
+        targetName: target.name,
+        card,
+        guessedCard: guessedType,
+        hit: isHit,
+      });
+      if (isHit) {
         eliminatePlayer(room, target, "宣言が当たりました。");
       } else {
-        room.log.push("宣言は外れました。");
+        room.log.push(
+          `${target.name} の手札は ${guessedType.name} ではありませんでした。`,
+        );
       }
       break;
     }
@@ -579,9 +736,7 @@ function applyCardEffect(
         card: target.hand[0],
         message: `${target.name} の手札を確認しました。`,
       });
-      room.log.push(
-        `${player.name} は ${target.name} の手札を確認しました。`,
-      );
+      room.log.push(`${player.name} は ${target.name} の手札を確認しました。`);
       break;
     }
     case "duel": {
@@ -666,12 +821,16 @@ function applyCardEffect(
         logNoTargetEffect(room, protectedTargets, player, card);
         return;
       }
+      const playerCard = player.hand[0];
+      const targetCard = target.hand[0];
       room.lastEffect = createEffectEvent("exchange", {
         playerId: player.id,
         playerName: player.name,
         targetId: target.id,
         targetName: target.name,
         card,
+        playerCard,
+        targetCard,
       });
       const targetHand = target.hand;
       target.hand = player.hand;
@@ -711,6 +870,8 @@ function resolveRoundOrAdvance(room) {
 }
 
 function endRound(room, winners, reason) {
+  clearRoomTimer(room.code);
+  room.turnDeadlineAt = 0;
   const finalWinners =
     winners.length > 0 ? winners : chooseWinnersByHand(getActivePlayers(room));
   finalWinners.forEach((winner) => {
@@ -718,6 +879,7 @@ function endRound(room, winners, reason) {
   });
 
   room.roundWinnerIds = finalWinners.map((winner) => winner.id);
+  queueRoundStats(room, finalWinners);
   const winnerNames = finalWinners.map((winner) => winner.name).join("、");
   room.log.push(`${reason} 勝者: ${winnerNames}`);
 
@@ -729,6 +891,7 @@ function endRound(room, winners, reason) {
     room.log.push(
       `${gameWinners.map((player) => player.name).join("、")} がゲームに勝利しました。`,
     );
+    queueGameStats(room, gameWinners);
   } else {
     room.phase = "roundOver";
   }
@@ -973,6 +1136,8 @@ function serializeRoom(room, viewerId) {
     roomCode: room.code,
     phase: room.phase,
     round: room.round,
+    turnTimeLimitSeconds: room.turnTimeLimitSeconds || 0,
+    turnDeadlineAt: room.turnDeadlineAt || 0,
     targetScore: room.targetScore,
     hostId: room.hostId,
     currentPlayerId: currentPlayer?.id || null,
@@ -986,6 +1151,7 @@ function serializeRoom(room, viewerId) {
     you: viewer
       ? {
           id: viewer.id,
+          userId: viewer.userId || null,
           name: viewer.name,
           hand: viewer.hand,
           insight: room.insights.get(viewer.id) || "",
@@ -993,6 +1159,7 @@ function serializeRoom(room, viewerId) {
       : null,
     players: room.players.map((player) => ({
       id: player.id,
+      userId: player.userId || null,
       name: player.name,
       score: player.score,
       isHost: player.id === room.hostId,
@@ -1025,6 +1192,7 @@ function removePlayerFromRoom(room, playerId, reason) {
   }
 
   if (room.players.length === 0) {
+    clearRoomTimer(room.code);
     rooms.delete(room.code);
   }
 }
@@ -1054,10 +1222,12 @@ function assignHostIfNeeded(room) {
 }
 
 function resetRoomToLobby(room, message) {
+  clearRoomTimer(room.code);
   room.phase = "lobby";
   room.deck = [];
   room.burnCard = null;
   room.currentTurnIndex = 0;
+  room.turnDeadlineAt = 0;
   room.roundWinnerIds = [];
   room.lastPlayed = null;
   room.lastEffect = null;
@@ -1142,6 +1312,296 @@ function verifyRoomPassword(room, password) {
   );
 }
 
+function normalizeClientUser(user) {
+  if (!user || typeof user !== "object") {
+    return null;
+  }
+  const id = cleanSafeId(user.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    name: cleanName(user.name || ""),
+  };
+}
+
+function cleanSafeId(value) {
+  return String(value || "")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 128);
+}
+
+function normalizeTurnTime(value) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric)) {
+    return null;
+  }
+  return TURN_TIME_OPTIONS.has(numeric) ? numeric : null;
+}
+
+function scheduleRoomTimer(room) {
+  clearRoomTimer(room.code);
+
+  if (room.phase !== "playing" || !room.turnTimeLimitSeconds) {
+    room.turnDeadlineAt = 0;
+    return;
+  }
+
+  const limitMs = room.turnTimeLimitSeconds * 1000;
+  room.turnDeadlineAt = Date.now() + limitMs;
+  const timerId = setTimeout(() => {
+    onTurnTimeout(room.code);
+  }, limitMs + TURN_TIMER_GRACE_MS);
+
+  roomTimers.set(room.code, timerId);
+}
+
+function clearRoomTimer(roomCode) {
+  const timerId = roomTimers.get(roomCode);
+  if (timerId) {
+    clearTimeout(timerId);
+    roomTimers.delete(roomCode);
+  }
+}
+
+function onTurnTimeout(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || room.phase !== "playing") {
+    return;
+  }
+
+  const currentPlayer = getCurrentPlayer(room);
+  if (!currentPlayer || currentPlayer.eliminated || !currentPlayer.connected) {
+    return;
+  }
+
+  const move = pickAutoMove(room, currentPlayer);
+  if (!move) {
+    return;
+  }
+
+  room.log.push(
+    `${currentPlayer.name} は制限時間切れのため自動でカードを出しました。`,
+  );
+  playCard(
+    room,
+    currentPlayer.id,
+    move.cardUid,
+    move.targetId,
+    move.guessValue,
+  );
+  broadcastRoom(room);
+}
+
+function pickAutoMove(room, player) {
+  if (!Array.isArray(player.hand) || player.hand.length === 0) {
+    return null;
+  }
+
+  const forcedCard = getForcedCard(player.hand);
+  const card = forcedCard || player.hand[0];
+  const cardType = CARD_TYPE_BY_KEY.get(card.key);
+
+  const eligibleTargets = cardType
+    ? getEligibleTargets(room, player, cardType)
+    : [];
+
+  const target = eligibleTargets[0] || null;
+  const guessValue = cardType?.needsGuess ? 2 + crypto.randomInt(7) : undefined;
+
+  return {
+    cardUid: card.uid,
+    targetId: target?.id,
+    guessValue,
+  };
+}
+
+function ensurePlayerStats(userId, displayName) {
+  if (!userId) {
+    return;
+  }
+
+  prisma.playerStats
+    .upsert({
+      where: { userId },
+      create: {
+        userId,
+        displayName: displayName || "プレイヤー",
+      },
+      update: {
+        displayName: displayName || "プレイヤー",
+      },
+    })
+    .catch((error) => {
+      console.error("Failed to upsert player stats", error);
+    });
+}
+
+function queueCardPlayedStat(player) {
+  if (!player?.userId) {
+    return;
+  }
+
+  prisma.playerStats
+    .upsert({
+      where: { userId: player.userId },
+      create: {
+        userId: player.userId,
+        displayName: player.name,
+        totalCardsPlayed: 1,
+      },
+      update: {
+        displayName: player.name,
+        totalCardsPlayed: { increment: 1 },
+      },
+    })
+    .catch((error) => {
+      console.error("Failed to record played card", error);
+    });
+}
+
+function queueRoundStats(room, winners) {
+  const key = `${room.code}:${room.round}`;
+  if (room.lastRoundStatKey === key) {
+    return;
+  }
+  room.lastRoundStatKey = key;
+
+  winners
+    .filter((winner) => winner.userId)
+    .forEach((winner) => {
+      prisma.playerStats
+        .upsert({
+          where: { userId: winner.userId },
+          create: {
+            userId: winner.userId,
+            displayName: winner.name,
+            totalRoundsWon: 1,
+          },
+          update: {
+            displayName: winner.name,
+            totalRoundsWon: { increment: 1 },
+          },
+        })
+        .catch((error) => {
+          console.error("Failed to record round stats", error);
+        });
+    });
+
+  prisma.matchResult
+    .create({
+      data: {
+        roomCode: room.code,
+        round: room.round,
+        playerCount: room.players.length,
+        winnerNames: winners.map((winner) => winner.name).join("、"),
+        winnerUserIds: winners
+          .map((winner) => winner.userId)
+          .filter(Boolean)
+          .join(","),
+        summary: room.log[room.log.length - 1] || "ラウンド終了",
+      },
+    })
+    .catch((error) => {
+      console.error("Failed to store match result", error);
+    });
+}
+
+function queueGameStats(room, gameWinners) {
+  if (room.gameStatsRecorded) {
+    return;
+  }
+  room.gameStatsRecorded = true;
+
+  const participants = room.players.filter((player) => player.userId);
+  participants.forEach((participant) => {
+    const didWin = gameWinners.some((winner) => winner.id === participant.id);
+    prisma.playerStats
+      .upsert({
+        where: { userId: participant.userId },
+        create: {
+          userId: participant.userId,
+          displayName: participant.name,
+          totalGamesPlayed: 1,
+          totalGamesWon: didWin ? 1 : 0,
+        },
+        update: {
+          displayName: participant.name,
+          totalGamesPlayed: { increment: 1 },
+          totalGamesWon: { increment: didWin ? 1 : 0 },
+        },
+      })
+      .catch((error) => {
+        console.error("Failed to record game stats", error);
+      });
+  });
+}
+
+async function safelyGetSession(req) {
+  if (!getAuthSession) {
+    return null;
+  }
+
+  try {
+    return await getAuthSession(req, authConfig);
+  } catch (error) {
+    console.error("Failed to get auth session", error);
+    return null;
+  }
+}
+
+let authConfig = null;
+
+async function setupAuth() {
+  const hasGoogleConfig =
+    Boolean(process.env.AUTH_GOOGLE_ID) &&
+    Boolean(process.env.AUTH_GOOGLE_SECRET) &&
+    Boolean(process.env.AUTH_SECRET);
+
+  if (!hasGoogleConfig) {
+    console.warn(
+      "Auth.js is disabled because AUTH_SECRET / AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET are not fully configured.",
+    );
+    return;
+  }
+
+  const [{ ExpressAuth, getSession }, { PrismaAdapter }, googleProviderModule] =
+    await Promise.all([
+      import("@auth/express"),
+      import("@auth/prisma-adapter"),
+      import("@auth/core/providers/google"),
+    ]);
+
+  expressAuth = ExpressAuth;
+  getAuthSession = getSession;
+  prismaAdapterFactory = PrismaAdapter;
+  googleProviderFactory = googleProviderModule.default;
+
+  authConfig = {
+    adapter: prismaAdapterFactory(prisma),
+    trustHost: true,
+    secret: process.env.AUTH_SECRET,
+    providers: [
+      googleProviderFactory({
+        clientId: process.env.AUTH_GOOGLE_ID,
+        clientSecret: process.env.AUTH_GOOGLE_SECRET,
+      }),
+    ],
+    callbacks: {
+      session({ session, user }) {
+        if (session?.user) {
+          session.user.id = user.id;
+        }
+        return session;
+      },
+    },
+  };
+
+  app.use("/auth/*", expressAuth(authConfig));
+}
+
 function isRateLimited(socket, action, intervalMs) {
   const now = Date.now();
   const rateLimits = socket.data.rateLimits || {};
@@ -1156,6 +1616,29 @@ function isRateLimited(socket, action, intervalMs) {
   return false;
 }
 
-server.listen(PORT, () => {
-  console.log(`Love Letter inspired game running at http://localhost:${PORT}`);
+async function bootstrap() {
+  try {
+    await prisma.$connect();
+    await setupAuth();
+    server.listen(PORT, () => {
+      console.log(
+        `Love Letter inspired game running at http://localhost:${PORT}`,
+      );
+    });
+  } catch (error) {
+    console.error("Failed to bootstrap server", error);
+    process.exitCode = 1;
+  }
+}
+
+process.on("SIGINT", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
+
+process.on("SIGTERM", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+bootstrap();

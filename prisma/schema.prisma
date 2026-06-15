@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  stats         PlayerStats?
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionToken])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model PlayerStats {
+  id              Int      @id @default(autoincrement())
+  userId          String   @unique
+  displayName     String
+  totalGamesPlayed Int     @default(0)
+  totalGamesWon   Int      @default(0)
+  totalRoundsWon  Int      @default(0)
+  totalCardsPlayed Int     @default(0)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([totalGamesWon, totalRoundsWon])
+}
+
+model MatchResult {
+  id          Int      @id @default(autoincrement())
+  roomCode    String
+  round       Int
+  playerCount Int
+  winnerNames String
+  winnerUserIds String
+  summary     String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

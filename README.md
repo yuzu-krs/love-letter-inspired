@@ -6,6 +6,7 @@
 
 ```bash
 npm install
+npm run prisma:migrate
 npm start
 ```
 
@@ -16,11 +17,14 @@ npm start
 
 - 2〜4人対応です。
 - 部屋主がゲームを開始します。
+- 部屋主は開始前に1手の持ち時間を `なし / 30 / 60 / 120 / 180 秒` から選べます。
 - 手番では1枚引き、2枚の手札から1枚を出します。
 - 最後まで残るか、山札が尽きた時点で一番強い手札を持っている人がラウンド勝者です。
 - 2人戦は4点、3〜4人戦は3点でゲーム勝利です。
 - 対戦中もルールブックでカード効果と枚数構成を確認できます。
 - 占い結果はログではなく、自分だけに見える秘密メモとして表示されます。
+- Googleログインしたユーザーは通算成績（ゲーム勝利、ラウンド勝利、プレイ数、カード使用数）が保存されます。
+- ロビーにランキング（上位10人）が表示されます。
 - 効果音は画面右上の `音 ON/OFF` で切り替えられます。
 - 部屋一覧では、募集中/対戦中、参加人数、鍵付きかどうかを確認できます。
 - カード使用、脱落、ラウンド/ゲーム勝者は大きな演出レイヤーで表示されます。
@@ -28,11 +32,27 @@ npm start
 - 2番の占い、3番の決闘、5番の捨て札、4番の護りも専用ポップアップでカード付き表示されます。
 - View Transitions、ネイティブ `dialog` のコマンドパレット、Web Share、ハプティクス、container queries によるモダンUI強化を入れています。
 - 対応ブラウザではPWAとしてインストールでき、Service Workerで画面とカード画像をキャッシュします。
-- `⌘K` / `Ctrl+K` でクイック操作を開き、部屋作成、参加、招待、音切替、キャッシュ更新ができます。
+
+## Googleログイン設定（Auth.js）
+
+`.env` を作成して以下を設定してください。
+
+```bash
+DATABASE_URL="file:./dev.db"
+AUTH_SECRET="openssl rand -base64 32 で生成した値"
+AUTH_GOOGLE_ID="Google OAuth client id"
+AUTH_GOOGLE_SECRET="Google OAuth client secret"
+```
+
+Google OAuth の承認済みリダイレクトURIは以下です。
+
+- `http://localhost:3000/auth/callback/google`
 
 ## 実装メモ
 
 - サーバー: Express + Socket.IO
+- 認証: Auth.js (`@auth/express`) + Google Provider
+- DB: SQLite + Prisma (Prisma Adapter / Prisma Client / Prisma Migrate)
 - クライアント: Vanilla HTML/CSS/JavaScript
 - 状態管理: サーバーを正本にして、各プレイヤーへ自分の手札だけを配信
 - カード画像: `assets/cards/01-scout.png` 〜 `assets/cards/08-sealed-letter.png`
@@ -41,6 +61,7 @@ npm start
 
 ```bash
 npm run check
+npm run prisma:generate
 npm audit --audit-level=moderate
 ```
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "secret-letter-table-v6";
+const CACHE_NAME = "secret-letter-table-v10";
 const CORE_ASSETS = [
   "/",
   "/styles.css",
@@ -9,6 +9,10 @@ const CORE_ASSETS = [
   "/assets/ogp.svg",
   "/assets/ogp.png",
   "/assets/table-pattern.svg",
+  "/assets/bgm/ゲームBGM.mp3",
+  "/assets/bgm/カードめくり1.mp3",
+  "/assets/cards/ゲーム背景.png",
+  "/assets/cards/ラウンド開始.png",
   "/assets/cards/01-scout.png",
   "/assets/cards/02-seer.png",
   "/assets/cards/03-duel.png",

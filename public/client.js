@@ -12,6 +12,12 @@ const elements = {
   formError: document.querySelector("#formError"),
   installButton: document.querySelector("#installButton"),
   installGameButton: document.querySelector("#installGameButton"),
+  accountPanel: document.querySelector("#accountPanel"),
+  accountTitle: document.querySelector("#accountTitle"),
+  accountStats: document.querySelector("#accountStats"),
+  leaderboard: document.querySelector("#leaderboard"),
+  googleLoginButton: document.querySelector("#googleLoginButton"),
+  logoutButton: document.querySelector("#logoutButton"),
   roomCodeLabel: document.querySelector("#roomCodeLabel"),
   phaseTitle: document.querySelector("#phaseTitle"),
   scoreTrack: document.querySelector("#scoreTrack"),
@@ -24,6 +30,9 @@ const elements = {
   handPanel: document.querySelector("#handPanel"),
   actionPanel: document.querySelector("#actionPanel"),
   soundToggleButton: document.querySelector("#soundToggleButton"),
+  bgmToggleButton: document.querySelector("#bgmToggleButton"),
+  effectVolumeControl: document.querySelector("#effectVolumeControl"),
+  bgmVolumeControl: document.querySelector("#bgmVolumeControl"),
   inviteButton: document.querySelector("#inviteButton"),
   cinematicLayer: document.querySelector("#cinematicLayer"),
   toastStack: document.querySelector("#toastStack"),
@@ -47,13 +56,20 @@ const roomPhaseLabels = {
 };
 
 const CARD_BACK_IMAGE = "/assets/card-back.svg";
+const ROUND_START_IMAGE = "/assets/cards/ラウンド開始.png";
+const BACKGROUND_MUSIC_SRC = "/assets/bgm/ゲームBGM.mp3";
+const CARD_FLIP_SOUND_SRC = "/assets/bgm/カードめくり1.mp3";
 
 let state = null;
 let roomSummaries = [];
 let selectedCardUid = "";
 let isRulebookOpen = true;
 let soundEnabled = localStorage.getItem("secret-letter-sound") !== "off";
+let bgmEnabled = localStorage.getItem("secret-letter-bgm") !== "off";
+let effectVolume = parseStoredVolume("secret-letter-effect-volume", 0.8);
+let bgmVolume = parseStoredVolume("secret-letter-bgm-volume", 0.35);
 let audioContext = null;
+let backgroundMusic = null;
 let musicTimerId = 0;
 let musicStep = 0;
 let cinematicQueue = [];
@@ -61,6 +77,12 @@ let isCinematicPlaying = false;
 let installPromptEvent = null;
 let serviceWorkerRegistration = null;
 let activeViewTransition = null;
+let authUser = null;
+let authStats = null;
+let authEnabled = false;
+let leaderboardEntries = [];
+let turnCountdownTimer = 0;
+let visibleInsightKey = "";
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 );
@@ -84,8 +106,12 @@ const BACKGROUND_MUSIC_PATTERN = [
 ];
 
 updateSoundButton();
+updateBgmButton();
+updateVolumeControls();
 updateNetworkStatus();
 registerServiceWorker();
+loadAuthState();
+loadLeaderboard();
 
 document.addEventListener("pointerdown", () => {
   unlockAudio();
@@ -113,7 +139,15 @@ elements.createRoomButton.addEventListener("click", () => {
   const name = elements.playerName.value.trim();
   const password = elements.roomPassword.value.trim();
   setError("");
-  socket.emit("createRoom", { name, password }, handleJoinReply);
+  socket.emit(
+    "createRoom",
+    {
+      name,
+      password,
+      user: authUser ? { id: authUser.id, name: authUser.name } : null,
+    },
+    handleJoinReply,
+  );
 });
 
 elements.joinForm.addEventListener("submit", (event) => {
@@ -125,7 +159,16 @@ elements.joinForm.addEventListener("submit", (event) => {
   const roomCode = elements.roomCode.value.trim();
   const password = elements.roomPassword.value.trim();
   setError("");
-  socket.emit("joinRoom", { name, roomCode, password }, handleJoinReply);
+  socket.emit(
+    "joinRoom",
+    {
+      name,
+      roomCode,
+      password,
+      user: authUser ? { id: authUser.id, name: authUser.name } : null,
+    },
+    handleJoinReply,
+  );
 });
 
 elements.soundToggleButton?.addEventListener("click", () => {
@@ -135,9 +178,30 @@ elements.soundToggleButton?.addEventListener("click", () => {
   if (soundEnabled) {
     unlockAudio();
     playSound("success");
+  }
+});
+
+elements.bgmToggleButton?.addEventListener("click", () => {
+  bgmEnabled = !bgmEnabled;
+  localStorage.setItem("secret-letter-bgm", bgmEnabled ? "on" : "off");
+  updateBgmButton();
+  if (bgmEnabled) {
     syncBackgroundMusic();
   } else {
     stopBackgroundMusic();
+  }
+});
+
+elements.effectVolumeControl?.addEventListener("input", (event) => {
+  effectVolume = Number(event.target.value) / 100;
+  localStorage.setItem("secret-letter-effect-volume", String(effectVolume));
+});
+
+elements.bgmVolumeControl?.addEventListener("input", (event) => {
+  bgmVolume = Number(event.target.value) / 100;
+  localStorage.setItem("secret-letter-bgm-volume", String(bgmVolume));
+  if (backgroundMusic) {
+    backgroundMusic.volume = bgmVolume;
   }
 });
 
@@ -220,6 +284,11 @@ elements.leaveButton.addEventListener("click", () => {
 
 socket.on("stateUpdate", (nextState) => {
   const previousState = state;
+  if (!previousState && nextState.you?.insight) {
+    visibleInsightKey = getInsightKey(nextState.you.insight);
+  } else if (!nextState.you?.insight) {
+    visibleInsightKey = "";
+  }
   state = nextState;
   selectedCardUid = keepSelectedCard(nextState) ? selectedCardUid : "";
   localStorage.setItem("secret-letter-room", nextState.roomCode);
@@ -232,6 +301,7 @@ socket.on("stateUpdate", (nextState) => {
     elements.gamePanel.classList.remove("hidden");
     render();
   });
+  syncTurnCountdown();
   reactToStateChange(previousState, nextState);
   syncBackgroundMusic();
 });
@@ -263,6 +333,146 @@ function requestRoomList() {
     roomSummaries = reply.rooms || [];
     renderRoomList();
   });
+}
+
+async function loadAuthState() {
+  try {
+    const response = await fetch("/api/me", { credentials: "include" });
+    const payload = await response.json();
+    authEnabled = Boolean(payload?.authEnabled);
+    authUser = payload?.authenticated ? payload.user : null;
+    authStats = payload?.authenticated ? payload.stats || null : null;
+    if (authUser?.name) {
+      elements.playerName.value = authUser.name;
+    }
+  } catch (error) {
+    authEnabled = false;
+    authUser = null;
+    authStats = null;
+  }
+
+  renderAccountPanel();
+}
+
+async function loadLeaderboard() {
+  try {
+    const response = await fetch("/api/leaderboard", {
+      credentials: "include",
+    });
+    const payload = await response.json();
+    leaderboardEntries = payload?.ok ? payload.leaderboard || [] : [];
+  } catch (error) {
+    leaderboardEntries = [];
+  }
+
+  renderLeaderboard();
+  renderAccountPanel();
+}
+
+function renderAccountPanel() {
+  if (
+    !elements.accountPanel ||
+    !elements.accountTitle ||
+    !elements.accountStats
+  ) {
+    return;
+  }
+
+  const shouldShowLeaderboard = leaderboardEntries.length > 0;
+  const shouldShowAccount = authEnabled || authUser || shouldShowLeaderboard;
+  elements.accountPanel.classList.toggle("hidden", !shouldShowAccount);
+
+  if (!shouldShowAccount) {
+    return;
+  }
+
+  if (!authUser) {
+    elements.accountTitle.textContent = "スコアを保存";
+    elements.accountStats.innerHTML = authEnabled
+      ? '<p class="status-text">Googleログインで戦績を残せます。</p>'
+      : "";
+    elements.googleLoginButton?.classList.toggle("hidden", !authEnabled);
+    elements.logoutButton?.classList.add("hidden");
+    renderLeaderboard();
+    return;
+  }
+
+  const games = authStats?.totalGamesPlayed || 0;
+  const wins = authStats?.totalGamesWon || 0;
+  const rounds = authStats?.totalRoundsWon || 0;
+  const cards = authStats?.totalCardsPlayed || 0;
+
+  elements.accountTitle.textContent = `${authUser.name} でログイン中`;
+  elements.accountStats.innerHTML = `
+    <article class="stat-grid">
+      <div><strong>${wins}</strong><span>ゲーム勝利</span></div>
+      <div><strong>${rounds}</strong><span>ラウンド勝利</span></div>
+      <div><strong>${games}</strong><span>プレイ数</span></div>
+      <div><strong>${cards}</strong><span>出したカード</span></div>
+    </article>
+  `;
+  elements.googleLoginButton?.classList.add("hidden");
+  elements.logoutButton?.classList.remove("hidden");
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  if (!elements.leaderboard) {
+    return;
+  }
+
+  if (leaderboardEntries.length === 0) {
+    elements.leaderboard.innerHTML = "";
+    return;
+  }
+
+  elements.leaderboard.innerHTML = `
+    <h3>ランキング</h3>
+    <ol class="leaderboard-list">
+      ${leaderboardEntries
+        .slice(0, 10)
+        .map((entry, index) => {
+          return `<li><strong>${index + 1}. ${escapeHtml(entry.displayName)}</strong><span>${entry.totalGamesWon}勝 / ${entry.totalRoundsWon}R</span></li>`;
+        })
+        .join("")}
+    </ol>
+  `;
+}
+
+function syncTurnCountdown() {
+  stopTurnCountdown();
+  updateTurnCountdownLabel();
+
+  if (!state?.turnDeadlineAt) {
+    return;
+  }
+
+  turnCountdownTimer = window.setInterval(() => {
+    updateTurnCountdownLabel();
+  }, 500);
+}
+
+function stopTurnCountdown() {
+  if (turnCountdownTimer) {
+    window.clearInterval(turnCountdownTimer);
+    turnCountdownTimer = 0;
+  }
+}
+
+function updateTurnCountdownLabel() {
+  const label = document.querySelector("#turnTimerLabel");
+  if (!label) {
+    return;
+  }
+
+  if (!state?.turnDeadlineAt || !state?.turnTimeLimitSeconds) {
+    label.textContent = "持ち時間: なし";
+    return;
+  }
+
+  const remainingMs = Math.max(0, state.turnDeadlineAt - Date.now());
+  const remainingSec = Math.ceil(remainingMs / 1000);
+  label.textContent = `残り ${remainingSec} 秒`;
 }
 
 function renderRoomList() {
@@ -391,8 +601,13 @@ function registerServiceWorker() {
 
   window.addEventListener("load", async () => {
     try {
-      serviceWorkerRegistration = await navigator.serviceWorker.register("/service-worker.js");
-      showToast("オフライン準備OK", "カード画像と画面をキャッシュしました。", "success");
+      serviceWorkerRegistration =
+        await navigator.serviceWorker.register("/service-worker.js");
+      showToast(
+        "オフライン準備OK",
+        "カード画像と画面をキャッシュしました。",
+        "success",
+      );
     } catch (error) {
       console.warn("Service Worker registration failed", error);
     }
@@ -408,7 +623,11 @@ function updateInstallButtons() {
 
 async function promptInstall() {
   if (!installPromptEvent) {
-    showToast("インストール準備中", "ブラウザ条件が整うと表示されます。", "card");
+    showToast(
+      "インストール準備中",
+      "ブラウザ条件が整うと表示されます。",
+      "card",
+    );
     return;
   }
 
@@ -547,14 +766,19 @@ function renderTable() {
     <div class="turn-status">
       <strong>${statusTitle}</strong>
       <span>${statusText}</span>
+      <small class="turn-timer" id="turnTimerLabel">持ち時間: なし</small>
     </div>
     ${state.lastPlayed ? renderPlayedPreview(state.lastPlayed) : '<div class="played-placeholder">捨て札置き場</div>'}
   `;
 
-  if (state.you?.insight) {
+  updateTurnCountdownLabel();
+
+  const insight = state.you?.insight;
+  if (insight && getInsightKey(insight) === visibleInsightKey) {
     elements.insightBox.innerHTML = renderInsight(state.you.insight);
     elements.insightBox.classList.remove("hidden");
   } else {
+    elements.insightBox.innerHTML = "";
     elements.insightBox.classList.add("hidden");
   }
 
@@ -608,21 +832,76 @@ function renderActions() {
   const isHost = state.you?.id === state.hostId;
 
   if (state.phase === "lobby") {
+    const timerOptions = [
+      { value: 0, label: "なし" },
+      { value: 30, label: "30秒" },
+      { value: 60, label: "60秒" },
+      { value: 120, label: "120秒" },
+      { value: 180, label: "180秒" },
+    ];
     elements.actionPanel.innerHTML = `
       <div class="lobby-action-row">
         <div>
           <div class="action-title-row"><h3>開始</h3></div>
           <p class="status-text">${isHost ? "部屋主がゲームを開始できます。" : "部屋主の開始を待っています。"}</p>
+          <label>
+            1人あたりの手持ち時間
+            <select id="turnTimeSelect" ${isHost ? "" : "disabled"}>
+              ${timerOptions
+                .map((option) => {
+                  const selected =
+                    Number(state.turnTimeLimitSeconds || 0) === option.value
+                      ? "selected"
+                      : "";
+                  return `<option value="${option.value}" ${selected}>${option.label}</option>`;
+                })
+                .join("")}
+            </select>
+          </label>
         </div>
         <button class="primary-button" id="startButton" type="button" ${isHost && state.players.length >= 2 ? "" : "disabled"}>ゲーム開始</button>
       </div>
       ${renderRulesPanel("open")}
     `;
     elements.actionPanel
+      .querySelector("#turnTimeSelect")
+      ?.addEventListener("change", (event) => {
+        if (!isHost) {
+          return;
+        }
+        socket.emit(
+          "updateRoomSettings",
+          {
+            roomCode: state.roomCode,
+            turnTimeLimitSeconds: Number(event.target.value),
+          },
+          (reply) => {
+            if (!reply?.ok) {
+              setActionError(reply?.error || "設定を更新できませんでした。");
+            }
+          },
+        );
+      });
+    elements.actionPanel
       .querySelector("#startButton")
       ?.addEventListener("click", () => {
         playSound("tap");
-        emitSimple("startGame");
+        socket.emit(
+          "startGame",
+          {
+            roomCode: state.roomCode,
+            turnTimeLimitSeconds: Number(
+              elements.actionPanel.querySelector("#turnTimeSelect")?.value ||
+                state.turnTimeLimitSeconds ||
+                0,
+            ),
+          },
+          (reply) => {
+            if (!reply?.ok) {
+              setActionError(reply?.error || "開始できませんでした。");
+            }
+          },
+        );
       });
     bindRulebookState();
     return;
@@ -955,6 +1234,16 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function getInsightKey(insight) {
+  if (!insight) {
+    return "";
+  }
+  if (typeof insight === "string") {
+    return insight;
+  }
+  return insight.id || JSON.stringify(insight);
+}
+
 function renderInsight(insight) {
   if (typeof insight === "string") {
     return `
@@ -1042,9 +1331,6 @@ function reactToStateChange(previousState, nextState) {
   }
 
   if (previousInsight !== nextInsight && nextState.you?.insight) {
-    playSound("reveal");
-    vibrate([8, 24, 8]);
-    showToast("占い結果を確認しました", "ポップアップに表示しています。", "reveal");
     showPeekCinematic(nextState.you.insight);
   }
 
@@ -1068,6 +1354,7 @@ function reactToStateChange(previousState, nextState) {
       playSound("start");
       vibrate(12);
       showToast("ラウンド開始", "手札を確認しましょう。", "start");
+      showRoundStartCinematic(nextState);
     } else if (
       nextState.phase === "roundOver" ||
       nextState.phase === "gameOver"
@@ -1080,6 +1367,10 @@ function reactToStateChange(previousState, nextState) {
         "finish",
       );
       showWinnerCinematic(nextState);
+      if (nextState.phase === "gameOver") {
+        loadAuthState();
+        loadLeaderboard();
+      }
     }
   }
 }
@@ -1095,6 +1386,20 @@ function getNewEliminations(previousState, nextState) {
 }
 
 function reactToEffectEvent(effect) {
+  if (effect.type === "guess") {
+    playSound(effect.hit ? "success" : "guessMiss");
+    vibrate(effect.hit ? [10, 22, 28] : [8, 16, 8]);
+    showToast(
+      effect.hit ? "宣言的中" : "宣言は外れました",
+      effect.hit
+        ? `${effect.targetName} の手札は ${effect.guessedCard.name} でした。`
+        : `${effect.targetName} の手札は ${effect.guessedCard.name} ではありませんでした。`,
+      effect.hit ? "success" : "card",
+    );
+    showGuessCinematic(effect);
+    return;
+  }
+
   if (effect.type === "duel") {
     playSound("duel");
     vibrate([14, 18, 18, 18, 26]);
@@ -1200,6 +1505,20 @@ function showDuelCinematic(effect) {
   );
 }
 
+function showRoundStartCinematic(nextState) {
+  enqueueCinematic(
+    `
+      <article class="cinematic-round-start">
+        <img src="${ROUND_START_IMAGE}" alt="ラウンド開始" />
+        <div class="round-start-copy">
+          <span>Round ${nextState.round}</span>
+        </div>
+      </article>
+    `,
+    "round-start",
+  );
+}
+
 function showPeekCinematic(insight) {
   if (!insight?.card) {
     return;
@@ -1217,6 +1536,19 @@ function showPeekCinematic(insight) {
       </article>
     `,
     "peek",
+    {
+      onStart: () => {
+        visibleInsightKey = getInsightKey(insight);
+        renderTable();
+        playSound("reveal");
+        vibrate([8, 24, 8]);
+        showToast(
+          "占い結果を確認しました",
+          "ポップアップに表示しています。",
+          "reveal",
+        );
+      },
+    },
   );
 }
 
@@ -1257,21 +1589,60 @@ function showGuardCinematic(effect) {
   );
 }
 
-function showExchangeCinematic(effect) {
+function showGuessCinematic(effect) {
+  const guessedCard = effect.guessedCard;
+  if (!guessedCard) {
+    return;
+  }
+
   enqueueCinematic(
     `
-      <article class="cinematic-exchange">
-        <div class="exchange-player left">
+      <article class="cinematic-guess ${effect.hit ? "hit" : "miss"} tone-${guessedCard.tone}">
+        <img src="${getCardImage(guessedCard)}" alt="${escapeHtml(guessedCard.name)}" />
+        <div class="cinematic-copy">
+          <span>${effect.hit ? "GUESS HIT" : "GUESS MISS"}</span>
+          <strong>${escapeHtml(effect.targetName)} の手札は ${guessedCard.value} ${escapeHtml(guessedCard.name)} ${effect.hit ? "でした" : "ではありませんでした"}</strong>
+          <p>${escapeHtml(effect.playerName)} の宣言結果です。</p>
+        </div>
+      </article>
+    `,
+    "guess",
+  );
+}
+
+function showExchangeCinematic(effect) {
+  const playerCard = effect?.playerCard;
+  const targetCard = effect?.targetCard;
+  const isRevealed = Boolean(playerCard && targetCard);
+  const playerCardImage = isRevealed
+    ? getCardImage(playerCard)
+    : CARD_BACK_IMAGE;
+  const targetCardImage = isRevealed
+    ? getCardImage(targetCard)
+    : CARD_BACK_IMAGE;
+  const playerCardLabel = isRevealed
+    ? `${playerCard.value} ${escapeHtml(playerCard.name)}`
+    : "交換カード";
+  const targetCardLabel = isRevealed
+    ? `${targetCard.value} ${escapeHtml(targetCard.name)}`
+    : "交換カード";
+
+  enqueueCinematic(
+    `
+      <article class="cinematic-exchange ${isRevealed ? "revealed" : "hidden-cards"}">
+        <div class="exchange-player left ${isRevealed ? `tone-${playerCard.tone}` : ""}">
           <span>${escapeHtml(effect.playerName)}</span>
-          <img src="${CARD_BACK_IMAGE}" alt="${escapeHtml(effect.playerName)} の手札" />
+          <img src="${playerCardImage}" alt="${escapeHtml(effect.playerName)} の交換カード" />
+          <strong>${playerCardLabel}</strong>
         </div>
         <div class="exchange-center">
           <span>SWAP</span>
           <strong>手札を交換</strong>
         </div>
-        <div class="exchange-player right">
+        <div class="exchange-player right ${isRevealed ? `tone-${targetCard.tone}` : ""}">
           <span>${escapeHtml(effect.targetName)}</span>
-          <img src="${CARD_BACK_IMAGE}" alt="${escapeHtml(effect.targetName)} の手札" />
+          <img src="${targetCardImage}" alt="${escapeHtml(effect.targetName)} の交換カード" />
+          <strong>${targetCardLabel}</strong>
         </div>
       </article>
     `,
@@ -1337,8 +1708,8 @@ function showWinnerCinematic(nextState) {
   );
 }
 
-function enqueueCinematic(markup, type) {
-  cinematicQueue.push({ markup, type });
+function enqueueCinematic(markup, type, options = {}) {
+  cinematicQueue.push({ markup, type, ...options });
   playNextCinematic();
 }
 
@@ -1353,6 +1724,7 @@ function playNextCinematic() {
 
   const item = cinematicQueue.shift();
   isCinematicPlaying = true;
+  item.onStart?.();
   elements.cinematicLayer.className = `cinematic-layer show ${item.type}`;
   elements.cinematicLayer.innerHTML = `
     <div class="cinematic-stage">
@@ -1377,8 +1749,10 @@ function playNextCinematic() {
 
 function getCinematicDuration(type) {
   if (type === "winner") return 4200;
-  if (type === "duel") return 3900;
-  if (["discard", "peek", "guard", "exchange"].includes(type)) return 3600;
+  if (type === "duel") return 6200;
+  if (type === "round-start") return 3600;
+  if (["discard", "peek", "guard", "exchange", "guess"].includes(type))
+    return 3600;
   return 3200;
 }
 
@@ -1401,10 +1775,39 @@ function updateSoundButton() {
     return;
   }
 
-  elements.soundToggleButton.textContent = soundEnabled
-    ? "音/BGM ON"
-    : "音/BGM OFF";
+  elements.soundToggleButton.textContent = soundEnabled ? "ON" : "OFF";
   elements.soundToggleButton.setAttribute("aria-pressed", String(soundEnabled));
+}
+
+function updateBgmButton() {
+  if (!elements.bgmToggleButton) {
+    return;
+  }
+
+  elements.bgmToggleButton.textContent = bgmEnabled ? "ON" : "OFF";
+  elements.bgmToggleButton.setAttribute("aria-pressed", String(bgmEnabled));
+}
+
+function updateVolumeControls() {
+  if (elements.effectVolumeControl) {
+    elements.effectVolumeControl.value = String(Math.round(effectVolume * 100));
+  }
+  if (elements.bgmVolumeControl) {
+    elements.bgmVolumeControl.value = String(Math.round(bgmVolume * 100));
+  }
+}
+
+function parseStoredVolume(key, fallback) {
+  const storedValue = localStorage.getItem(key);
+  if (storedValue === null) {
+    return fallback;
+  }
+
+  const value = Number(storedValue);
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(1, Math.max(0, value));
 }
 
 function unlockAudio() {
@@ -1414,7 +1817,10 @@ function unlockAudio() {
 
   if (audioContext) {
     if (audioContext.state === "suspended") {
-      audioContext.resume().then(syncBackgroundMusic).catch(() => {});
+      audioContext
+        .resume()
+        .then(syncBackgroundMusic)
+        .catch(() => {});
     }
     return;
   }
@@ -1428,7 +1834,7 @@ function unlockAudio() {
 }
 
 function syncBackgroundMusic() {
-  if (!soundEnabled || !state?.roomCode || document.hidden) {
+  if (!bgmEnabled || !state?.roomCode || document.hidden) {
     stopBackgroundMusic();
     return;
   }
@@ -1437,31 +1843,54 @@ function syncBackgroundMusic() {
 }
 
 function startBackgroundMusic() {
-  if (musicTimerId) {
+  const music = getBackgroundMusic();
+  if (!music || !bgmEnabled || !state?.roomCode || document.hidden) {
     return;
   }
 
-  unlockAudio();
-  if (!audioContext || audioContext.state === "suspended") {
+  if (!music.paused) {
     return;
   }
 
-  scheduleBackgroundMusicStep();
-  musicTimerId = window.setInterval(scheduleBackgroundMusicStep, 480);
+  music.play().catch(() => {});
 }
 
 function stopBackgroundMusic() {
-  if (!musicTimerId) {
+  if (musicTimerId) {
+    window.clearInterval(musicTimerId);
+    musicTimerId = 0;
+    musicStep = 0;
+  }
+
+  if (backgroundMusic) {
+    backgroundMusic.pause();
+  }
+}
+
+function getBackgroundMusic() {
+  if (backgroundMusic) {
+    return backgroundMusic;
+  }
+
+  backgroundMusic = new Audio(BACKGROUND_MUSIC_SRC);
+  backgroundMusic.loop = true;
+  backgroundMusic.preload = "auto";
+  backgroundMusic.volume = bgmVolume;
+  return backgroundMusic;
+}
+
+function playMediaSound(src, volume = 0.8) {
+  if (!soundEnabled) {
     return;
   }
 
-  window.clearInterval(musicTimerId);
-  musicTimerId = 0;
-  musicStep = 0;
+  const sound = new Audio(src);
+  sound.volume = Math.min(1, Math.max(0, volume * effectVolume));
+  sound.play().catch(() => {});
 }
 
 function scheduleBackgroundMusicStep() {
-  if (!soundEnabled || !state?.roomCode || !audioContext) {
+  if (!bgmEnabled || !state?.roomCode || !audioContext) {
     stopBackgroundMusic();
     return;
   }
@@ -1487,6 +1916,13 @@ function scheduleBackgroundMusicStep() {
 function playSound(type) {
   if (!soundEnabled) {
     return;
+  }
+
+  if (type === "card" || type === "play") {
+    playMediaSound(CARD_FLIP_SOUND_SRC, type === "play" ? 0.76 : 0.58);
+    if (type === "card") {
+      return;
+    }
   }
 
   unlockAudio();
@@ -1532,6 +1968,10 @@ function playSound(type) {
       [620, 0.08, "triangle", 0.08, 0.075],
       [360, 0.06, "sine", 0.18, 0.06],
       [720, 0.1, "triangle", 0.26, 0.07],
+    ],
+    guessMiss: [
+      [420, 0.07, "triangle", 0, 0.06],
+      [310, 0.1, "sine", 0.08, 0.055],
     ],
     start: [
       [330, 0.07, "triangle", 0],
@@ -1587,11 +2027,12 @@ function playTone(frequency, duration, wave, delay = 0, volume = 0.08) {
   const startAt = audioContext.currentTime + delay;
   const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
+  const adjustedVolume = Math.max(0.0001, volume * effectVolume);
 
   oscillator.type = wave;
   oscillator.frequency.setValueAtTime(frequency, startAt);
   gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.01);
+  gain.gain.exponentialRampToValueAtTime(adjustedVolume, startAt + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
 
   oscillator.connect(gain);

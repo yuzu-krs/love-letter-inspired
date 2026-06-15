@@ -50,6 +50,35 @@
           </button>
         </div>
 
+        <section
+          class="account-panel hidden"
+          id="accountPanel"
+          aria-label="アカウント"
+        >
+          <div class="account-head">
+            <div>
+              <p class="eyebrow">Records</p>
+              <h2 id="accountTitle">スコアを保存</h2>
+            </div>
+            <div class="button-row">
+              <a
+                class="secondary-button compact"
+                id="googleLoginButton"
+                href="/auth/signin/google"
+                >Googleでログイン</a
+              >
+              <a
+                class="ghost-button compact hidden"
+                id="logoutButton"
+                href="/auth/signout"
+                >ログアウト</a
+              >
+            </div>
+          </div>
+          <div class="account-stats" id="accountStats"></div>
+          <div class="leaderboard" id="leaderboard"></div>
+        </section>
+
         <div class="table-teaser" aria-hidden="true">
           <img
             class="teaser-card teaser-card-one"
@@ -142,14 +171,46 @@
             >
               インストール
             </button>
-            <button
-              class="secondary-button compact"
-              id="soundToggleButton"
-              type="button"
-              aria-pressed="true"
-            >
-              音 ON
-            </button>
+            <div class="audio-control compact-control">
+              <span>効果音</span>
+              <input
+                id="effectVolumeControl"
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value="80"
+                aria-label="効果音の音量"
+              />
+              <button
+                class="secondary-button compact audio-toggle"
+                id="soundToggleButton"
+                type="button"
+                aria-pressed="true"
+              >
+                ON
+              </button>
+            </div>
+            <div class="audio-control compact-control">
+              <span>BGM</span>
+              <input
+                id="bgmVolumeControl"
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value="35"
+                aria-label="BGMの音量"
+              />
+              <button
+                class="secondary-button compact audio-toggle"
+                id="bgmToggleButton"
+                type="button"
+                aria-pressed="true"
+              >
+                ON
+              </button>
+            </div>
             <button
               class="secondary-button compact"
               id="inviteButton"
